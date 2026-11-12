@@ -252,19 +252,23 @@ object CommonActivity {
         AccountManager.initMainAPI()
         NewPipe.init(DownloaderTestImpl.getInstance())
 
-        MainActivity.activityResultLauncher =
-            componentActivity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                if (result.resultCode == AppCompatActivity.RESULT_OK) {
-                    val actionUid =
-                        getKey<String>("last_click_action") ?: return@registerForActivityResult
-                    Log.d(TAG, "Loading action $actionUid result handler")
-                    val action = VideoClickActionHolder.getByUniqueId(actionUid) as? OpenInAppAction
-                        ?: return@registerForActivityResult
-                    action.onResultSafe(act, result.data)
-                    removeKey("last_click_action")
-                    removeKey("last_opened")
+        try {
+            MainActivity.activityResultLauncher =
+                componentActivity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+                    if (result.resultCode == AppCompatActivity.RESULT_OK) {
+                        val actionUid =
+                            getKey<String>("last_click_action") ?: return@registerForActivityResult
+                        Log.d(TAG, "Loading action $actionUid result handler")
+                        val action = VideoClickActionHolder.getByUniqueId(actionUid) as? OpenInAppAction
+                            ?: return@registerForActivityResult
+                        action.onResultSafe(act, result.data)
+                        removeKey("last_click_action")
+                        removeKey("last_opened")
+                    }
                 }
-            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "registerForActivityResult skipped or failed: ${t.message}")
+        }
 
         // Ask for notification permissions on Android 13
         // Not while biometric locked, the dialog cancels the biometric prompt

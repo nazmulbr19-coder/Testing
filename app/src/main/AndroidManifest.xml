@@ -298,11 +298,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
-
-        <provider
-            android:name=".CarConnectionProvider"
-            android:authorities="androidx.car.app.connection"
-            android:exported="false" />
     </application>
     
 </manifest>

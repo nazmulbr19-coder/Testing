@@ -3,7 +3,10 @@ package com.lagradost.cloudstream3.ui
 import android.content.Context
 import android.os.Bundle
 import android.util.AttributeSet
+import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
@@ -14,33 +17,49 @@ import com.lagradost.cloudstream3.utils.UIHelper.adjustAlpha
 import com.lagradost.cloudstream3.utils.UIHelper.colorFromAttribute
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
 
-
 class MyMiniControllerFragment : MiniControllerFragment() {
     var currentColor: Int = 0
 
     override fun onDestroy() {
         currentColor = 0
-        super.onDestroy()
+        try {
+            super.onDestroy()
+        } catch (_: Throwable) {
+        }
     }
 
-    // I KNOW, KINDA SPAGHETTI SOLUTION, BUT IT WORKS
     override fun onInflate(context: Context, attributeSet: AttributeSet, bundle: Bundle?) {
-        if (currentColor == 0) {
-            context.withStyledAttributes(attributeSet, R.styleable.CustomCast, 0, 0) {
-                if (hasValue(R.styleable.CustomCast_customCastBackgroundColor)) {
-                    currentColor = getColor(R.styleable.CustomCast_customCastBackgroundColor, 0)
+        try {
+            if (currentColor == 0) {
+                context.withStyledAttributes(attributeSet, R.styleable.CustomCast, 0, 0) {
+                    if (hasValue(R.styleable.CustomCast_customCastBackgroundColor)) {
+                        currentColor = getColor(R.styleable.CustomCast_customCastBackgroundColor, 0)
+                    }
                 }
             }
+            super.onInflate(context, attributeSet, bundle)
+        } catch (t: Throwable) {
+            Log.w("MyMiniController", "onInflate failed: ${t.message}")
         }
+    }
 
-        super.onInflate(context, attributeSet, bundle)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return try {
+            super.onCreateView(inflater, container, savedInstanceState)
+                ?: View(inflater.context).apply { visibility = View.GONE }
+        } catch (t: Throwable) {
+            Log.w("MyMiniController", "Cast mini controller view unavailable: ${t.message}")
+            View(inflater.context).apply { visibility = View.GONE }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        // SEE https://github.com/dandar3/android-google-play-services-cast-framework/blob/master/res/layout/cast_mini_controller.xml
         try {
+            super.onViewCreated(view, savedInstanceState)
             val progressBar: ProgressBar? = view.findViewById(R.id.progressBar)
             val containerAll: LinearLayout? = view.findViewById(com.google.android.gms.cast.framework.R.id.container_all)
             val containerCurrent: RelativeLayout? = view.findViewById(com.google.android.gms.cast.framework.R.id.container_current)
@@ -64,8 +83,21 @@ class MyMiniControllerFragment : MiniControllerFragment() {
             }
             val child = containerAll?.getChildAt(0)
             child?.alpha = 0f // REMOVE GRADIENT
-        } catch (e: Exception) {
-            // JUST IN CASE
+        } catch (_: Throwable) {
+        }
+    }
+
+    override fun onResume() {
+        try {
+            super.onResume()
+        } catch (_: Throwable) {
+        }
+    }
+
+    override fun onPause() {
+        try {
+            super.onPause()
+        } catch (_: Throwable) {
         }
     }
 }

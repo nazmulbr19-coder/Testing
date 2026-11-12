@@ -76,8 +76,8 @@ class CloudStreamApp : Application(), SingletonImageLoader.Factory {
         // buildImageLoader(applicationContext)
 
         ExceptionHandler(filesDir.resolve("last_error")) {
-            val intent = context!!.packageManager.getLaunchIntentForPackage(context!!.packageName)
-            startActivity(Intent.makeRestartActivityTask(intent!!.component))
+            // Fatal crashes are logged to last_error for safe recovery on next user launch;
+            // do not force immediate restart to prevent OS crash loops ("app keeps stopping").
         }.also {
             exceptionHandler = it
             Thread.setDefaultUncaughtExceptionHandler(it)

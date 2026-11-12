@@ -486,8 +486,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         updateTheme(this) // Update if system theme
 
         val navHostFragment =
-            supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
-        navHostFragment.navController.currentDestination?.let { updateNavBar(it) }
+            supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
+        navHostFragment?.navController?.currentDestination?.let { updateNavBar(it) }
     }
 
     private fun updateNavBar(destination: NavDestination) {
@@ -1274,15 +1274,28 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                     }
                 }
 
-                ActivityMainBinding.bind(newLocalBinding.root) // this may crash
+                try {
+                    ActivityMainBinding.bind(newLocalBinding.root)
+                } catch (_: Throwable) {
+                    val phoneBinding = ActivityMainBinding.inflate(layoutInflater, null, false)
+                    setContentView(phoneBinding.root)
+                    phoneBinding
+                }
             } else {
                 val newLocalBinding = ActivityMainBinding.inflate(layoutInflater, null, false)
                 setContentView(newLocalBinding.root)
                 newLocalBinding
             }
         } catch (t: Throwable) {
-            showToast(txt(R.string.unable_to_inflate, t.message ?: ""), Toast.LENGTH_LONG)
-            null
+            logError(t)
+            try {
+                val fallbackBinding = ActivityMainBinding.inflate(layoutInflater, null, false)
+                setContentView(fallbackBinding.root)
+                fallbackBinding
+            } catch (fatal: Throwable) {
+                logError(fatal)
+                null
+            }
         }
 
         binding?.apply {
@@ -1652,7 +1665,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
 
         CommonActivity.init(this)
         val navHostFragment =
-            supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment
+            supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
+                ?: return
         val navController = navHostFragment.navController
 
         navController.addOnDestinationChangedListener { _: NavController, navDestination: NavDestination, bundle: Bundle? ->
