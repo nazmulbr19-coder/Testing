@@ -90,6 +90,7 @@ import com.lagradost.cloudstream3.network.initClient
 import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.plugins.PluginManager.___DO_NOT_CALL_FROM_A_PLUGIN_loadAllOnlinePlugins
 import com.lagradost.cloudstream3.plugins.PluginManager.loadSinglePlugin
+import com.lagradost.cloudstream3.plugins.RepositoryManager
 import com.lagradost.cloudstream3.receivers.VideoDownloadRestartReceiver
 import com.lagradost.cloudstream3.services.SubscriptionWorkManager
 import com.lagradost.cloudstream3.syncproviders.AccountManager
@@ -1588,16 +1589,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             }
         }
 
-//        ioSafe {
-//            val plugins =
-//                RepositoryParser.getRepoPlugins("https://raw.githubusercontent.com/recloudstream/TestPlugin/master/repo.json")
-//                    ?: emptyList()
-//            plugins.map {
-//                println("Load plugin: ${it.name} ${it.url}")
-//                RepositoryParser.loadSiteTemp(applicationContext, it.url, it.name)
-//            }
-//        }
-
         // init accounts
         ioSafe {
             // we need to run this after we init all apis, otherwise currentSyncApi will fuck itself
@@ -2030,9 +2021,9 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
     suspend fun checkGithubConnectivity(): Boolean {
         return try {
             app.get(
-                "https://raw.githubusercontent.com/recloudstream/.github/master/connectivitycheck",
+                RepositoryManager.ABIDEX_REPO_URL,
                 timeout = 5
-            ).text.trim() == "ok"
+            ).text.contains("pluginLists")
         } catch (t: Throwable) {
             false
         }

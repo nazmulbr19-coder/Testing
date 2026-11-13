@@ -27,7 +27,6 @@ class AppSettings internal constructor(
     val provider = ProviderPreferences(preferences)
     val ui = UIPreferences(preferences)
     val security = SecurityPreferences(preferences)
-    val updates = UpdatePreferences(preferences)
     val backup = BackupPreferences(preferences)
     val plugins = PluginPreferences(preferences)
 }
@@ -42,12 +41,6 @@ class BackupPreferences(preferences: PreferenceStore) {
     val frequency = preferences.getInt("automatic_backup_key", 0)
     val path = preferences.getString("backup_path_key")
     val visualPath = preferences.getString("backup_dir_key")
-}
-class UpdatePreferences(preferences: PreferenceStore) {
-    val apkInstaller = preferences.getInt("apk_installer_key",1)
-    val showAppUpdates = preferences.getBoolean("auto_update", false)
-    // Node id for this update
-    val skipUpdate = preferences.getString("skip_update_key", "")
 }
 
 class SecurityPreferences(preferences: PreferenceStore) {

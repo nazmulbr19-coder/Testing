@@ -207,9 +207,9 @@ fun Preview() {
                         uuid1 to Repository(
                             uuid = uuid1,
                             info = RepositoryInfo(
-                                name = "Cloudstream providers repository",
-                                description = "hello",
-                                url = "https://raw.githubusercontent.com/recloudstream/extensions/refs/heads/master/repo.json",
+                                name = RepositoryManager.ABIDEX_REPO_NAME,
+                                description = "Official built-in ABIDEX extensions repository",
+                                url = RepositoryManager.ABIDEX_REPO_URL,
                                 iconUrl = null
                             ),
                             status = RepositoryStatus.Loading,

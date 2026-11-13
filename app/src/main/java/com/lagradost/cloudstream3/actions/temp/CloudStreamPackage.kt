@@ -37,8 +37,8 @@ import kotlinx.serialization.Serializable
  */
 @Suppress("Unused")
 class CloudStreamPackage : OpenInAppAction(
-    appName = txt("CloudStream"),
-    packageName = BuildConfig.APPLICATION_ID, //"com.lagradost.cloudstream3" or "com.lagradost.cloudstream3.prerelease"
+    appName = txt("ABIDEX"),
+    packageName = BuildConfig.APPLICATION_ID,
     intentClass = "com.lagradost.cloudstream3.ui.player.DownloadedPlayerActivity"
 ) {
     override val oneSource: Boolean = false

@@ -275,4 +275,25 @@ class AbidexRepositoryTest {
             ).isOutdated
         )
     }
+
+    @Test
+    fun testApplicationIdIsDecoupledFromUpstreamCloudstream() {
+        org.junit.Assert.assertNotEquals("com.lagradost.cloudstream3", BuildConfig.APPLICATION_ID)
+        assertTrue(BuildConfig.APPLICATION_ID.startsWith("com.aistudio.abidex."))
+    }
+
+    @Test
+    fun testPluginDigestPairParsingRemainsIntact() {
+        val dashDigest = com.lagradost.cloudstream4.viewmodels.DigestPair.parse(
+            "sha256-2ab2fac8c64abe91ed58758b74b45d19f68b6df00f874b1e436d0c427dd367c8"
+        )
+        assertNotNull(dashDigest)
+        assertEquals("sha256", dashDigest?.algorithm)
+        assertEquals(32, dashDigest?.digest?.size)
+
+        val colonDigest = com.lagradost.cloudstream4.viewmodels.DigestPair.parse(
+            "sha256:2ab2fac8c64abe91ed58758b74b45d19f68b6df00f874b1e436d0c427dd367c8"
+        )
+        assertEquals(dashDigest, colonDigest)
+    }
 }
