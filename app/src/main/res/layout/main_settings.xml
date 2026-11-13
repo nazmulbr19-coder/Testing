@@ -85,21 +85,13 @@
                 style="@style/SettingsItem"
 
                 android:nextFocusUp="@id/settings_providers"
-                android:nextFocusDown="@id/settings_updates"
-                android:text="@string/category_ui" />
-
-            <TextView
-                android:id="@+id/settings_updates"
-                style="@style/SettingsItem"
-
-                android:nextFocusUp="@id/settings_ui"
                 android:nextFocusDown="@id/settings_credits"
-                android:text="@string/category_updates" />
+                android:text="@string/category_ui" />
 
             <TextView
                 android:id="@+id/settings_credits"
                 style="@style/SettingsItem"
-                android:nextFocusUp="@id/settings_updates"
+                android:nextFocusUp="@id/settings_ui"
                 android:visibility="gone"
                 android:text="@string/category_account" />
 

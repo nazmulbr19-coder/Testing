@@ -111,10 +111,6 @@
                     app:tint="?attr/textColor" />
             </FrameLayout>
         </LinearLayout>
-
-        <include
-            android:id="@+id/tvtypes_chips_scroll"
-            layout="@layout/tvtypes_chips_scroll" />
     </LinearLayout>
 
 
@@ -144,7 +140,7 @@
         android:descendantFocusability="afterDescendants"
 
         android:nextFocusLeft="@id/nav_rail_view"
-        android:nextFocusUp="@id/tvtypes_chips"
+        android:nextFocusUp="@id/main_search"
         android:visibility="gone"
         tools:listitem="@layout/homepage_parent" />
 
@@ -155,7 +151,7 @@
         android:background="?attr/primaryBlackBackground"
         android:descendantFocusability="afterDescendants"
         android:nextFocusLeft="@id/nav_rail_view"
-        android:nextFocusUp="@id/tvtypes_chips"
+        android:nextFocusUp="@id/main_search"
         android:visibility="visible"
         tools:listitem="@layout/search_history_item" />
     </LinearLayout>

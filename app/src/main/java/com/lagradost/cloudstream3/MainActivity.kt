@@ -51,6 +51,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSnapHelper
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
+import androidx.work.WorkManager
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.Session
 import com.google.android.gms.cast.framework.SessionManager
@@ -122,10 +123,8 @@ import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLandscape
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.ui.settings.Globals.updateTv
-import com.lagradost.cloudstream3.ui.settings.SettingsGeneral
 import com.lagradost.cloudstream3.ui.setup.HAS_DONE_SETUP_KEY
 import com.lagradost.cloudstream3.ui.setup.SetupFragmentExtensions
-import com.lagradost.cloudstream3.utils.ApkInstaller
 import com.lagradost.cloudstream3.utils.AppContextUtils.getApiDubstatusSettings
 import com.lagradost.cloudstream3.utils.AppContextUtils.html
 import com.lagradost.cloudstream3.utils.AppContextUtils.isCastApiAvailable
@@ -141,7 +140,6 @@ import com.lagradost.cloudstream3.utils.AppContextUtils.updateHasTrailers
 import com.lagradost.cloudstream3.utils.BackPressedCallbackHelper.attachBackPressedCallback
 import com.lagradost.cloudstream3.utils.BackPressedCallbackHelper.detachBackPressedCallback
 import com.lagradost.cloudstream3.utils.BackupUtils.backup
-import com.lagradost.cloudstream3.utils.BackupUtils.setUpBackup
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.BiometricCallback
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.biometricPrompt
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.deviceHasPasswordPinLock
@@ -157,7 +155,6 @@ import com.lagradost.cloudstream3.utils.DataStoreHelper.accounts
 import com.lagradost.cloudstream3.utils.DataStoreHelper.migrateResumeWatching
 import com.lagradost.cloudstream3.utils.Event
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
-import com.lagradost.cloudstream3.utils.InAppUpdater.runAutoUpdate
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showBottomDialog
 import com.lagradost.cloudstream3.utils.SnackbarHelper.showSnackbar
 import com.lagradost.cloudstream3.utils.TvChannelUtils
@@ -173,14 +170,11 @@ import com.lagradost.cloudstream3.utils.UIHelper.requestRW
 import com.lagradost.cloudstream3.utils.UIHelper.setNavigationBarColorCompat
 import com.lagradost.cloudstream3.utils.UIHelper.showProgress
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
-import com.lagradost.cloudstream3.utils.USER_PROVIDER_API
 import com.lagradost.cloudstream3.utils.USER_SELECTED_HOMEPAGE_API
 import com.lagradost.cloudstream3.utils.downloader.DownloadQueueManager
 import com.lagradost.cloudstream3.utils.setText
 import com.lagradost.cloudstream3.utils.setTextHtml
 import com.lagradost.cloudstream3.utils.txt
-import com.lagradost.cloudstream4.compose.CloudStreamThemeAppSettings
-import com.lagradost.cloudstream4.theme.CloudStreamTheme
 import com.lagradost.safefile.SafeFile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -193,7 +187,6 @@ import java.net.URLDecoder
 import java.nio.charset.Charset
 import kotlin.math.abs
 import kotlin.math.absoluteValue
-import kotlin.reflect.full.createInstance
 import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCallback {
@@ -512,7 +505,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             R.id.navigation_subtitles,
             R.id.navigation_chrome_subtitles,
             R.id.navigation_settings_player,
-            R.id.navigation_settings_updates,
             R.id.navigation_settings_ui,
             R.id.navigation_settings_account,
             R.id.navigation_settings_providers,
@@ -588,7 +580,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                     R.id.navigation_subtitles,
                     R.id.navigation_chrome_subtitles,
                     R.id.navigation_settings_player,
-                    R.id.navigation_settings_updates,
                     R.id.navigation_settings_ui,
                     R.id.navigation_settings_account,
                     R.id.navigation_settings_providers,
@@ -655,10 +646,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
     override fun onPause() {
         super.onPause()
 
-        // Start any delayed updates
-        if (ApkInstaller.delayedInstaller?.startInstallation() == true) {
-            Toast.makeText(this, R.string.update_started, Toast.LENGTH_LONG).show()
-        }
         try {
             if (isCastApiAvailable()) {
                 mSessionManager?.removeSessionManagerListener(mSessionManagerListener)
@@ -814,24 +801,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         ioSafe {
             pluginsLock.withLock {
                 allProviders.withLock {
-                    // Load cloned sites after plugins have been loaded since clones depend on plugins.
                     try {
-                        getKey<Array<SettingsGeneral.CustomSite>>(USER_PROVIDER_API)?.let { list ->
-                            list.forEach { custom ->
-                                allProviders.firstOrNull {
-                                    it::class.simpleName == custom.parentClassName
-                                }?.let {
-                                    allProviders.add(
-                                        it::class.createInstance().apply {
-                                            name = custom.name
-                                            lang = custom.lang
-                                            mainUrl = custom.url.trimEnd('/')
-                                            canBeOverridden = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
                         // it.hashCode() is not enough to make sure they are distinct
                         apis = allProviders.distinctBy {
                             it.lang + it.name + it.mainUrl + it::class.qualifiedName
@@ -1313,13 +1283,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 padTop = false
             )
 
-            composeView.apply {
-                setContent {
-                    CloudStreamThemeAppSettings {
-                        MainActivityScreen.Content()
-                    }
-                }
-            }
+            composeView.isVisible = false
         }
 
         // overscan
@@ -1379,6 +1343,12 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 }
 
                 ioSafe {
+                    // Keep Auto Plugin Updates enforced on startup with no user toggle to disable it
+                    safe {
+                        settingsManager.edit {
+                            putBoolean(getString(R.string.auto_update_plugins_key), true)
+                        }
+                    }
                     // ABIDEX: Automatically initialize built-in repository and download/load official providers
                     PluginManager.initAbidexBuiltInRepositoryAndPlugins(this@MainActivity)
                 }
@@ -1660,8 +1630,10 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             apis = allProviders.distinctBy { it }
         }
 
-        //  val navView: BottomNavigationView = findViewById(R.id.nav_view)
-        setUpBackup()
+        // Cancel any legacy periodic backup schedule removed with Updates & Backup settings
+        safe {
+            WorkManager.getInstance(this).cancelUniqueWork("work_backup")
+        }
 
         CommonActivity.init(this)
         val navHostFragment =

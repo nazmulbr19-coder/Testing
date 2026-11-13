@@ -8,11 +8,9 @@ import androidx.lifecycle.ViewModelProvider
 import com.lagradost.cloudstream3.AllLanguagesName
 import com.lagradost.cloudstream3.BuildConfig
 import com.lagradost.cloudstream3.R
-import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.databinding.FragmentPluginsBinding
 import com.lagradost.cloudstream3.mvvm.observe
 import com.lagradost.cloudstream3.ui.BaseFragment
-import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.bindChips
 import com.lagradost.cloudstream3.ui.result.FOCUS_SELF
 import com.lagradost.cloudstream3.ui.result.setLinearListLayout
 import com.lagradost.cloudstream3.ui.setRecycledViewPool
@@ -182,26 +180,10 @@ class PluginsFragment : BaseFragment<FragmentPluginsBinding>(
             downloadAllButton?.isVisible = false
             binding.settingsToolbar.menu?.findItem(R.id.lang_filter)?.isVisible = false
             pluginViewModel.updatePluginListLocal()
-
-            binding.tvtypesChipsScroll.root.isVisible = false
         } else {
             pluginViewModel.updatePluginList(context, listOf(repositoryData))
-            binding.tvtypesChipsScroll.root.isVisible = true
             // not needed for users but may be useful for devs
             downloadAllButton?.isVisible = BuildConfig.DEBUG
-
-            bindChips(
-                binding.tvtypesChipsScroll.tvtypesChips,
-                emptyList(),
-                TvType.entries.toList(),
-                callback = { list ->
-                    pluginViewModel.tvTypes.clear()
-                    pluginViewModel.tvTypes.addAll(list.map { it.name })
-                    pluginViewModel.updateFilteredPlugins()
-                },
-                nextFocusDown = R.id.plugin_recycler_view,
-                nextFocusUp = null,
-            )
         }
     }
 

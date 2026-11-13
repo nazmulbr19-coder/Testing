@@ -55,7 +55,7 @@
         android:clipToPadding="false"
         android:layout_marginBottom="80dp"
         android:nextFocusLeft="@id/nav_rail_view"
-        android:nextFocusUp="@id/tvtypes_chips"
+        android:nextFocusUp="@id/settings_toolbar"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         app:layout_behavior="@string/appbar_scrolling_view_behavior"
         tools:listitem="@layout/repository_item" />

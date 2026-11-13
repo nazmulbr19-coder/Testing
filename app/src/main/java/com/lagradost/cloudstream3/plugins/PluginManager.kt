@@ -521,6 +521,7 @@ object PluginManager {
         if (repoPlugins == null || repoPlugins.isEmpty()) {
             val count = synchronized(plugins) { plugins.size }
             Log.i(TAG, "ABIDEX repository manifest offline. Currently loaded plugins: $count")
+            loadedOnlinePlugins = true
             afterPluginsLoadedEvent.invoke(false)
             return count
         }
@@ -563,14 +564,21 @@ object PluginManager {
 
         val onlineSavedPlugins = getPluginsOnline()
 
-        // 6. Download missing/outdated plugins and load them
+        // 6. Download missing/outdated plugins and load them (Auto Plugin Updates always active)
+        val processedPaths = mutableSetOf<String>()
         for (pluginWrapper in pluginsToInstall) {
             val sitePlugin = pluginWrapper.plugin
             val destinationFile = getPluginPath(activity, sitePlugin.internalName, builtInRepoData.url)
-            val savedPlugin = onlineSavedPlugins.firstOrNull { it.internalName == sitePlugin.internalName }
+            processedPaths.add(destinationFile.absolutePath)
+            val savedPlugin = onlineSavedPlugins.firstOrNull {
+                it.filePath == destinationFile.absolutePath
+            } ?: onlineSavedPlugins.firstOrNull { it.internalName == sitePlugin.internalName }
 
             val fileExists = destinationFile.exists() && destinationFile.length() > 0
-            val isUpToDate = savedPlugin != null && savedPlugin.version >= sitePlugin.version && fileExists
+            val isUpToDate = savedPlugin != null &&
+                fileExists &&
+                sitePlugin.version != PLUGIN_VERSION_ALWAYS_UPDATE &&
+                savedPlugin.version >= sitePlugin.version
 
             if (isUpToDate) {
                 // Ensure already-downloaded up-to-date plugin is loaded into memory
@@ -580,7 +588,7 @@ object PluginManager {
                     loadPlugin(activity, destinationFile, savedPlugin)
                 }
             } else {
-                Log.i(TAG, "Downloading extension ${sitePlugin.name} v${sitePlugin.version}...")
+                Log.i(TAG, "Downloading/updating extension ${sitePlugin.name} v${sitePlugin.version}...")
                 var downloaded = false
                 for (attempt in 1..2) {
                     try {
@@ -600,6 +608,42 @@ object PluginManager {
                 if (!downloaded) {
                     Log.e(TAG, "Failed to download/install extension: ${sitePlugin.name}")
                 }
+            }
+        }
+
+        // 7. Auto-update any other saved online plugins from repositories
+        val extraSavedPlugins = onlineSavedPlugins.filter { it.filePath !in processedPaths }
+        if (extraSavedPlugins.isNotEmpty()) {
+            try {
+                val repoUrls = ((getKey<Array<RepositoryData>>(REPOSITORIES_KEY) ?: emptyArray()) + PREBUILT_REPOSITORIES)
+                    .distinctBy { it.url }
+                val allRemotePlugins = repoUrls.amap { repo ->
+                    getRepoPlugins(repo) ?: emptyList()
+                }.flatten().distinctBy { it.plugin.url }
+
+                val outdatedExtras = extraSavedPlugins.flatMap { savedData ->
+                    allRemotePlugins
+                        .filter { onlineData -> savedData.internalName == onlineData.plugin.internalName }
+                        .map { onlineData -> OnlinePluginData(savedData, onlineData) }
+                        .filter { it.validOnlineData(activity) }
+                }.distinctBy { it.onlineData.plugin.url }
+
+                outdatedExtras.amap { pluginData ->
+                    if (pluginData.isDisabled) {
+                        unloadPlugin(pluginData.savedData.filePath)
+                    } else if (pluginData.isOutdated) {
+                        downloadPlugin(
+                            activity = activity,
+                            pluginUrl = pluginData.onlineData.plugin.url,
+                            pluginHash = pluginData.onlineData.plugin.fileHash,
+                            internalName = pluginData.savedData.internalName,
+                            file = File(pluginData.savedData.filePath),
+                            loadPlugin = true
+                        )
+                    }
+                }
+            } catch (t: Throwable) {
+                logError(t)
             }
         }
 

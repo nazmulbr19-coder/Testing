@@ -104,8 +104,7 @@ object SettingsFragmentScreen : Screen {
             subtitle = persistentListOf(
                 R.string.extension_language,
                 R.string.title_downloads,
-                R.string.pref_category_bypass,
-                R.string.pref_category_links
+                R.string.pref_category_bypass
             )
         ),
         SettingsNavigation(
@@ -139,19 +138,6 @@ object SettingsFragmentScreen : Screen {
                 R.string.poster_ui_settings
             )
         ),
-        SettingsNavigation(
-            title = R.string.category_updates,
-            navigation = R.id.action_navigation_global_to_navigation_settings_updates,
-            screen = SettingsUpdatesScreen,
-            icon = R.drawable.mobile_arrow_down_24px,
-            subtitle = persistentListOf(
-                R.string.pref_category_app_updates,
-                R.string.pref_category_backup,
-                R.string.pref_category_extensions,
-                R.string.pref_category_actions
-            )
-        ),
-
     )
 
     @Immutable

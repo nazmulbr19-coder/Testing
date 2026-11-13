@@ -39,7 +39,6 @@ import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.MainActivity.Companion.afterPluginsLoadedEvent
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.databinding.FragmentSearchBinding
 import com.lagradost.cloudstream3.databinding.HomeSelectMainpageBinding
 import com.lagradost.cloudstream3.mvvm.Resource
@@ -49,10 +48,8 @@ import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.BaseAdapter
 import com.lagradost.cloudstream3.ui.BaseFragment
 import com.lagradost.cloudstream3.ui.home.HomeFragment
-import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.bindChips
 import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.currentSpan
 import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.loadHomepageList
-import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.updateChips
 import com.lagradost.cloudstream3.ui.home.HomeViewModel
 import com.lagradost.cloudstream3.ui.home.ParentItemAdapter
 import com.lagradost.cloudstream3.ui.result.FOCUS_SELF
@@ -158,13 +155,10 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         afterPluginsLoadedEvent -= ::reloadRepos
     }
 
-    var selectedSearchTypes = mutableListOf<TvType>()
     var selectedApis = mutableSetOf<String>()
 
     /**
-     * Will filter all providers by preferred media and selectedSearchTypes.
-     * If that results in no available providers then only filter
-     * providers by preferred media
+     * Filters active search providers by user selection and available providers.
      **/
     fun search(query: String?) {
         if (query == null) return
@@ -172,28 +166,23 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         // don't resume state from prev search
         (binding?.searchMasterRecycler?.adapter as? BaseAdapter<*, *>)?.clearState()
         context?.let { ctx ->
-            val default = enumValues<TvType>().sorted().filter { it != TvType.NSFW }
-                .map { it.ordinal.toString() }.toSet()
-            val preferredTypes = (PreferenceManager.getDefaultSharedPreferences(ctx)
-                .getStringSet(this.getString(R.string.prefer_media_type_key), default)
-                ?.ifEmpty { default } ?: default)
-                .mapNotNull { it.toIntOrNull() ?: return@mapNotNull null }
+            val validApiNames = ctx.filterProviderByPreferredMedia(hasHomePageIsRequired = false)
+                .map { it.name }
+                .toSet()
 
-            val settings = ctx.getApiSettings()
-
-            val notFilteredBySelectedTypes = selectedApis.filter { name ->
-                settings.contains(name)
-            }.map { name ->
-                name to getApiFromNameNull(name)?.supportedTypes
-            }.filter { (_, types) ->
-                types?.any { preferredTypes.contains(it.ordinal) } == true
+            val activeSelection = selectedApis.ifEmpty {
+                DataStoreHelper.searchPreferenceProviders.toMutableSet().also {
+                    selectedApis = it
+                }
             }
+
+            val providersToSearch = activeSelection.filter { name ->
+                validApiNames.contains(name)
+            }.ifEmpty { validApiNames }.toSet()
 
             searchViewModel.searchAndCancel(
                 query = query,
-                providersActive = notFilteredBySelectedTypes.filter { (_, types) ->
-                    types?.any { selectedSearchTypes.contains(it) } == true
-                }.ifEmpty { notFilteredBySelectedTypes }.map { it.first }.toSet()
+                providersActive = providersToSearch
             )
         }
     }
@@ -203,19 +192,8 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
 
     private fun reloadRepos(success: Boolean = false) = main {
         searchViewModel.reloadRepos()
-        context?.filterProviderByPreferredMedia()?.let { validAPIs ->
-            bindChips(
-                binding?.tvtypesChipsScroll?.tvtypesChips,
-                selectedSearchTypes,
-                validAPIs.flatMap { api -> api.supportedTypes }.distinct()
-            ) { list ->
-                if (selectedSearchTypes.toSet() != list.toSet()) {
-                    DataStoreHelper.searchPreferenceTags = list
-                    selectedSearchTypes.clear()
-                    selectedSearchTypes.addAll(list)
-                    search(binding?.mainSearch?.query?.toString())
-                }
-            }
+        if (selectedApis.isEmpty()) {
+            selectedApis = DataStoreHelper.searchPreferenceProviders.toMutableSet()
         }
     }
 
@@ -305,7 +283,6 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                 builder.show()
                 builder.let { dialog ->
                     val previousSelectedApis = selectedApis.toSet()
-                    val previousSelectedSearchTypes = selectedSearchTypes.toSet()
 
                     val isMultiLang = ctx.getApiProviderLangSettings().let { set ->
                         set.size > 1 || set.contains(AllLanguagesName)
@@ -320,7 +297,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                     listView?.choiceMode = AbsListView.CHOICE_MODE_MULTIPLE
 
                     listView?.setOnItemClickListener { _, _, i, _ ->
-                        if (currentValidApis.isNotEmpty()) {
+                        if (i in currentValidApis.indices) {
                             val api = currentValidApis[i].name
                             if (currentSelectedApis.contains(api)) {
                                 listView.setItemChecked(i, false)
@@ -332,15 +309,9 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                         }
                     }
 
-                    fun updateList(types: List<TvType>) {
-                        DataStoreHelper.searchPreferenceTags = types
-
+                    fun updateList() {
                         arrayAdapter.clear()
-                        currentValidApis = validAPIs.filter { api ->
-                            api.supportedTypes.any {
-                                types.contains(it)
-                            }
-                        }.sortedBy { it.name.lowercase() }
+                        currentValidApis = validAPIs.sortedBy { it.name.lowercase() }
 
                         val names = currentValidApis.map {
                             if (isMultiLang) "${
@@ -349,37 +320,11 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                                 )?.plus(" ") ?: ""
                             }${it.name}" else it.name
                         }
+                        arrayAdapter.addAll(names)
+                        arrayAdapter.notifyDataSetChanged()
                         for ((index, api) in currentValidApis.map { it.name }.withIndex()) {
                             listView?.setItemChecked(index, currentSelectedApis.contains(api))
                         }
-
-                        //arrayAdapter.notifyDataSetChanged()
-                        arrayAdapter.addAll(names)
-                        arrayAdapter.notifyDataSetChanged()
-                    }
-
-                    bindChips(
-                        selectMainpageBinding.tvtypesChipsScroll.tvtypesChips,
-                        selectedSearchTypes,
-                        validAPIs.flatMap { api -> api.supportedTypes }.distinct()
-                    ) { list ->
-                        updateList(list)
-
-                        // refresh selected chips in main chips
-                        if (selectedSearchTypes.toSet() != list.toSet()) {
-                            selectedSearchTypes.clear()
-                            selectedSearchTypes.addAll(list)
-                            updateChips(
-                                binding.tvtypesChipsScroll.tvtypesChips,
-                                selectedSearchTypes
-                            )
-
-                        }
-                    }
-
-
-                    cancelBtt?.setOnClickListener {
-                        dialog.dismissSafe()
                     }
 
                     cancelBtt?.setOnClickListener {
@@ -387,9 +332,6 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                     }
 
                     applyBtt?.setOnClickListener {
-                        //if (currentApiName != selectedApiName) {
-                        //    currentApiName?.let(callback)
-                        //}
                         dialog.dismissSafe()
                     }
 
@@ -398,11 +340,11 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                         selectedApis = currentSelectedApis
 
                         // run search when dialog is close
-                        if (previousSelectedApis != selectedApis.toSet() || previousSelectedSearchTypes != selectedSearchTypes.toSet()) {
+                        if (previousSelectedApis != selectedApis.toSet()) {
                             search(binding.mainSearch.query.toString())
                         }
                     }
-                    updateList(selectedSearchTypes.toList())
+                    updateList()
                 }
             }
         }
@@ -410,8 +352,6 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         val settingsManager = context?.let { PreferenceManager.getDefaultSharedPreferences(it) }
         val isAdvancedSearch = settingsManager?.getBoolean("advanced_search", true) ?: true
         val isSearchSuggestionsEnabled = settingsManager?.getBoolean("search_suggestions_enabled", true) ?: true
-
-        selectedSearchTypes = DataStoreHelper.searchPreferenceTags.toMutableList()
 
         if (!isLayout(PHONE)) {
             binding.searchFilter.isFocusable = true
@@ -562,11 +502,6 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                 SEARCH_HISTORY_OPEN -> {
                     if (searchItem == null) return@SearchHistoryAdaptor
                     searchViewModel.clearSearch()
-                    if (searchItem.type.isNotEmpty())
-                        updateChips(
-                            binding.tvtypesChipsScroll.tvtypesChips,
-                            searchItem.type.toMutableList()
-                        )
                     binding.mainSearch.setQuery(searchItem.searchText, true)
                 }
 
@@ -685,14 +620,16 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
             // On non-phone layouts, redirect focus and handle back button
             if (!isLayout(PHONE)) {
                 if (hasSuggestions) {
-                    binding.tvtypesChipsScroll.tvtypesChips.root.nextFocusDownId = R.id.search_suggestions_recycler
+                    binding.mainSearch.nextFocusDownId = R.id.search_suggestions_recycler
+                    binding.searchFilter.nextFocusDownId = R.id.search_suggestions_recycler
                     // Attach back button callback to clear suggestions
                     activity?.attachBackPressedCallback("SearchFragment") {
                         searchViewModel.clearSuggestions()
                     }
                 } else {
                     // Reset to default focus target (history)
-                    binding.tvtypesChipsScroll.tvtypesChips.root.nextFocusDownId = R.id.search_history_recycler
+                    binding.mainSearch.nextFocusDownId = R.id.search_history_recycler
+                    binding.searchFilter.nextFocusDownId = R.id.search_history_recycler
                     // Detach back button callback when no suggestions
                     activity?.detachBackPressedCallback("SearchFragment")
                 }

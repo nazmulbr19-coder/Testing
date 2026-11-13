@@ -467,15 +467,14 @@ object AppContextUtils {
         } catch (e: Throwable) {
             null
         } ?: default
+        val isNsfwEnabled = currentPrefMedia.contains(TvType.NSFW.ordinal)
         val langs = this.getApiProviderLangSettings()
         val hasUniversal = langs.contains(AllLanguagesName)
-        val allApis =
-            apis.filter { api -> (hasUniversal || langs.contains(api.lang)) && (api.hasMainPage || !hasHomePageIsRequired) }
-        return if (currentPrefMedia.isEmpty()) {
-            allApis
-        } else {
-            // Filter API depending on preferred media type
-            allApis.filter { api -> api.supportedTypes.any { currentPrefMedia.contains(it.ordinal) } }
+        return apis.filter { api ->
+            val matchesLang = hasUniversal || langs.contains(api.lang)
+            val matchesMainPage = api.hasMainPage || !hasHomePageIsRequired
+            val isPureNsfw = api.supportedTypes.isNotEmpty() && api.supportedTypes.all { it == TvType.NSFW }
+            matchesLang && matchesMainPage && (isNsfwEnabled || !isPureNsfw)
         }
     }
 

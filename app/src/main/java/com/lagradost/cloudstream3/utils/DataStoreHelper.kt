@@ -113,7 +113,7 @@ object DataStoreHelper {
         get() {
             val ret = searchPreferenceProvidersStrings
             return ret.ifEmpty {
-                context?.filterProviderByPreferredMedia()?.map { it.name } ?: emptyList()
+                context?.filterProviderByPreferredMedia(hasHomePageIsRequired = false)?.map { it.name } ?: emptyList()
             }
         }
         set(value) {
@@ -122,7 +122,7 @@ object DataStoreHelper {
 
     private var searchPreferenceTagsStrings: List<String> by UserPreferenceDelegate(
         "search_pref_tags",
-        listOf(TvType.Movie, TvType.TvSeries).map { it.name })
+        TvType.entries.filter { it != TvType.NSFW }.map { it.name })
 
     var searchPreferenceTags: List<TvType>
         get() = deserializeTv(searchPreferenceTagsStrings)
@@ -132,7 +132,7 @@ object DataStoreHelper {
 
     private var homePreferenceStrings: List<String> by UserPreferenceDelegate(
         "home_pref_homepage",
-        listOf(TvType.Movie, TvType.TvSeries).map { it.name })
+        TvType.entries.filter { it != TvType.NSFW }.map { it.name })
 
     var homePreference: List<TvType>
         get() = deserializeTv(homePreferenceStrings)
@@ -188,12 +188,22 @@ object DataStoreHelper {
     /** What account instance we are on, this number changes whenever anything about local accounts changes */
     val selectedAccountNumberFlow : StateFlow<Int> = _selectedAccountNumberFlow
 
+    const val DEFAULT_HOMEPAGE_API = "AniChan"
+
     /**
      * Get or set the current account homepage.
+     * Defaults to AniChan when unset or previously set to None/Random.
      * Setting this does not automatically reload the homepage.
      */
     var currentHomePage: String?
-        get() = getKey<String>("$currentAccount/$USER_SELECTED_HOMEPAGE_API")
+        get() {
+            val saved = getKey<String>("$currentAccount/$USER_SELECTED_HOMEPAGE_API")
+            return if (saved.isNullOrBlank() || saved == "None" || saved == "Random") {
+                DEFAULT_HOMEPAGE_API
+            } else {
+                saved
+            }
+        }
         set(value) {
             val key = "$currentAccount/$USER_SELECTED_HOMEPAGE_API"
             if (value == null) {

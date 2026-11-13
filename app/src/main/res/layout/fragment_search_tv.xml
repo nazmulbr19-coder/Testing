@@ -107,16 +107,12 @@
                     android:nextFocusLeft="@id/main_search"
                     android:nextFocusRight="@id/main_search"
                     android:nextFocusUp="@id/navigation_search"
-                    android:nextFocusDown="@id/tvtypes_chips_scroll"
+                    android:nextFocusDown="@id/search_history_recycler"
                     android:tag = "@string/tv_no_focus_tag"
                     android:src="@drawable/ic_baseline_tune_24"
                     app:tint="?attr/textColor" />
             </FrameLayout>
         </LinearLayout>
-
-        <include
-            android:id="@+id/tvtypes_chips_scroll"
-            layout="@layout/tvtypes_chips_scroll" />
     </LinearLayout>
 
 
@@ -145,7 +141,7 @@
         android:background="?attr/primaryBlackBackground"
         android:descendantFocusability="afterDescendants"
         android:nextFocusLeft="@id/navigation_search"
-        android:nextFocusUp="@id/tvtypes_chips"
+        android:nextFocusUp="@id/main_search"
         android:visibility="gone"
         tools:listitem="@layout/homepage_parent" />
 
@@ -157,7 +153,7 @@
         android:background="?attr/primaryBlackBackground"
         android:descendantFocusability="afterDescendants"
         android:nextFocusLeft="@id/navigation_search"
-        android:nextFocusUp="@id/tvtypes_chips"
+        android:nextFocusUp="@id/main_search"
         android:tag = "@string/tv_no_focus_tag"
         android:visibility="visible"
         tools:listitem="@layout/search_history_item" />
@@ -174,7 +170,7 @@
         android:elevation="8dp"
         android:descendantFocusability="afterDescendants"
         android:nextFocusLeft="@id/navigation_search"
-        android:nextFocusUp="@id/tvtypes_chips"
+        android:nextFocusUp="@id/main_search"
         android:visibility="gone"
         tools:listitem="@layout/search_suggestion_item" />
 

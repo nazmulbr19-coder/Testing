@@ -29,28 +29,23 @@ import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getActivity
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.chip.Chip
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.APIHolder
-import com.lagradost.cloudstream3.APIHolder.apis
 import com.lagradost.cloudstream3.APIHolder.getApiFromNameNull
 import com.lagradost.cloudstream3.AllLanguagesName
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.databinding.FragmentHomeBinding
 import com.lagradost.cloudstream3.databinding.HomeEpisodesExpandedBinding
 import com.lagradost.cloudstream3.databinding.HomeSelectMainpageBinding
-import com.lagradost.cloudstream3.databinding.TvtypesChipsBinding
 import com.lagradost.cloudstream3.mvvm.Resource
 import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.mvvm.observe
 import com.lagradost.cloudstream3.mvvm.observeNullable
 import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.ui.APIRepository.Companion.noneApi
-import com.lagradost.cloudstream3.ui.APIRepository.Companion.randomApi
 import com.lagradost.cloudstream3.ui.BaseFragment
 import com.lagradost.cloudstream3.ui.account.AccountHelper.showAccountSelectLinear
 import com.lagradost.cloudstream3.ui.account.AccountViewModel
@@ -116,7 +111,6 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
         fun Context.getDisplayName(apiName: String?): String? {
             return when (apiName) {
                 noneApi.name -> getString(R.string.none)
-                randomApi.name -> getString(R.string.home_random)
                 else -> apiName
             }
         }
@@ -278,116 +272,8 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
             return bottomSheetDialogBuilder
         }
 
-        private fun getPairList(
-            anime: Chip?,
-            cartoons: Chip?,
-            tvs: Chip?,
-            docs: Chip?,
-            movies: Chip?,
-            asian: Chip?,
-            livestream: Chip?,
-            torrent: Chip?,
-            nsfw: Chip?,
-            others: Chip?,
-        ): List<Pair<Chip?, List<TvType>>> {
-            // This list should be same order as home screen to aid navigation
-            return listOf(
-                Pair(movies, listOf(TvType.Movie)),
-                Pair(tvs, listOf(TvType.TvSeries)),
-                Pair(anime, listOf(TvType.Anime, TvType.OVA, TvType.AnimeMovie)),
-                Pair(asian, listOf(TvType.AsianDrama)),
-                Pair(cartoons, listOf(TvType.Cartoon)),
-                Pair(docs, listOf(TvType.Documentary)),
-                Pair(livestream, listOf(TvType.Live)),
-                Pair(torrent, listOf(TvType.Torrent)),
-                Pair(nsfw, listOf(TvType.NSFW)),
-                Pair(others, listOf(TvType.Others)),
-            )
-        }
-
-        private fun getPairList(header: TvtypesChipsBinding) = getPairList(
-            header.homeSelectAnime,
-            header.homeSelectCartoons,
-            header.homeSelectTvSeries,
-            header.homeSelectDocumentaries,
-            header.homeSelectMovies,
-            header.homeSelectAsian,
-            header.homeSelectLivestreams,
-            header.homeSelectTorrents,
-            header.homeSelectNsfw,
-            header.homeSelectOthers
-        )
-
-        fun validateChips(header: TvtypesChipsBinding?, validTypes: List<TvType>) {
-            if (header == null) return
-            val pairList = getPairList(header)
-            for ((button, types) in pairList) {
-                val isValid = validTypes.any { types.contains(it) }
-                button?.isVisible = isValid
-            }
-        }
-
-        fun updateChips(header: TvtypesChipsBinding?, selectedTypes: List<TvType>) {
-            if (header == null) return
-            val pairList = getPairList(header)
-            for ((button, types) in pairList) {
-                button?.isChecked =
-                    button.isVisible && selectedTypes.any { types.contains(it) }
-            }
-        }
-
-        fun bindChips(
-            header: TvtypesChipsBinding?,
-            selectedTypes: List<TvType>,
-            validTypes: List<TvType>,
-            callback: (List<TvType>) -> Unit
-        ) {
-            bindChips(header, selectedTypes, validTypes, callback, null, null)
-        }
-
-        fun bindChips(
-            header: TvtypesChipsBinding?,
-            selectedTypes: List<TvType>,
-            validTypes: List<TvType>,
-            callback: (List<TvType>) -> Unit,
-            nextFocusDown: Int?,
-            nextFocusUp: Int?
-        ) {
-            if (header == null) return
-            val pairList = getPairList(header)
-            for ((button, types) in pairList) {
-                val isValid = validTypes.any { types.contains(it) }
-                button?.isVisible = isValid
-                button?.isChecked = isValid && selectedTypes.any { types.contains(it) }
-                button?.isFocusable = true
-                if (isLayout(TV)) {
-                    button?.isFocusableInTouchMode = true
-                }
-
-                if (nextFocusDown != null)
-                    button?.nextFocusDownId = nextFocusDown
-
-                if (nextFocusUp != null)
-                    button?.nextFocusUpId = nextFocusUp
-
-                button?.setOnCheckedChangeListener { _, _ ->
-                    val list = ArrayList<TvType>()
-                    for ((sbutton, vvalidTypes) in pairList) {
-                        if (sbutton?.isChecked == true)
-                            list.addAll(vvalidTypes)
-                    }
-                    callback(list)
-                }
-            }
-        }
-
         fun Context.selectHomepage(selectedApiName: String?, callback: (String) -> Unit) {
             val validAPIs = filterProviderByPreferredMedia().toMutableList()
-
-            validAPIs.add(0, randomApi)
-            validAPIs.add(0, noneApi)
-            //val builder: AlertDialog.Builder = AlertDialog.Builder(this)
-            //builder.setView(R.layout.home_select_mainpage)
             val builder =
                 BottomSheetDialog(this)
 
@@ -404,12 +290,10 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                 val isMultiLang = getApiProviderLangSettings().let { set ->
                     set.size > 1 || set.contains(AllLanguagesName)
                 }
-                //dialog.window?.setGravity(Gravity.BOTTOM)
 
                 var currentApiName = selectedApiName
 
                 var currentValidApis: MutableList<MainAPI> = mutableListOf()
-                val preSelectedTypes = DataStoreHelper.homePreference.toMutableList()
 
                 binding.cancelBtt.setOnClickListener {
                     dialog.dismissSafe()
@@ -470,7 +354,7 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                 listView?.choiceMode = AbsListView.CHOICE_MODE_SINGLE
 
                 listView?.setOnItemClickListener { _, _, i, _ ->
-                    if (currentValidApis.isNotEmpty()) {
+                    if (i in currentValidApis.indices) {
                         currentApiName = currentValidApis[i].name
                         //to switch to apply simply remove this
                         currentApiName.let(callback)
@@ -479,23 +363,11 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                 }
 
                 fun updateList() {
-                    DataStoreHelper.homePreference = preSelectedTypes
                     val pinnedp = DataStoreHelper.pinnedProviders.toList()
                     pinnedphashset = pinnedp.toHashSet()
                     arrayAdapter.clear()
                     val sortedApis = validAPIs
-                        .filter {
-                            val isPinned = pinnedphashset.contains(it.name)
-
-                            // Hide pinned NSFW when NSFW not selected. NSFW is distracting when not chosen.
-                            if (isPinned && !preSelectedTypes.contains(TvType.NSFW)) {
-                                if (it.supportedTypes.all { type -> type == TvType.NSFW }) return@filter false
-                            }
-
-                            it.hasMainPage && (isPinned || it.supportedTypes.any(
-                                preSelectedTypes::contains
-                            ))
-                        }
+                        .filter { it.hasMainPage }
                         .sortedBy { it.name.lowercase() }
 
                     val sortedApiMap = LinkedHashMap<String, MainAPI>().apply {
@@ -509,7 +381,6 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                     val remainingApis = sortedApis.filterNot { pinnedphashset.contains(it.name) }
 
                     currentValidApis = mutableListOf<MainAPI>().apply {
-                        addAll(validAPIs.take(2))
                         addAll(pinnedApis)
                         addAll(remainingApis)
                     }
@@ -518,14 +389,17 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                         val displayName = getDisplayName(it.name)
                         if (isMultiLang) "${getFlagFromIso(it.lang)?.plus(" ") ?: ""}$displayName" else displayName
                     }
-                    val index = currentValidApis.map { it.name }.indexOf(currentApiName)
-                    listView?.setItemChecked(index, true)
                     arrayAdapter.addAll(names)
                     arrayAdapter.notifyDataSetChanged()
+                    val targetSelection = currentApiName ?: DataStoreHelper.DEFAULT_HOMEPAGE_API
+                    val index = currentValidApis.indexOfFirst { it.name == targetSelection }
+                    if (index >= 0) {
+                        listView?.setItemChecked(index, true)
+                    }
                 }
                 // pin provider on hold
                 listView?.setOnItemLongClickListener { _, _, i, _ ->
-                    if (currentValidApis.isNotEmpty() && i > 1) {
+                    if (i in currentValidApis.indices) {
                         val pinnedp = DataStoreHelper.pinnedProviders.toMutableList()
                         val thisapi = currentValidApis[i].name
                         if (pinnedp.contains(thisapi)) {
@@ -539,15 +413,6 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                     true
                 }
 
-                bindChips(
-                    binding.tvtypesChipsScroll.tvtypesChips,
-                    preSelectedTypes,
-                    validAPIs.flatMap { it.supportedTypes }.distinct()
-                ) { list ->
-                    preSelectedTypes.clear()
-                    preSelectedTypes.addAll(list)
-                    updateList()
-                }
                 updateList()
             }
         }
@@ -703,7 +568,7 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
 
             homePreviewReloadProvider.setOnClickListener {
                 homeViewModel.loadAndCancel(
-                    homeViewModel.apiName.value ?: noneApi.name,
+                    homeViewModel.apiName.value ?: DataStoreHelper.DEFAULT_HOMEPAGE_API,
                     forceReload = true,
                     fromUI = true
                 )

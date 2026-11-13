@@ -196,4 +196,83 @@ class AbidexRepositoryTest {
         assertTrue(names.contains("RareAnimesIndia"))
         assertTrue(names.contains("Toonix"))
     }
+
+    @Test
+    fun testDefaultProviderIsAniChan() {
+        assertEquals(
+            "AniChan",
+            com.lagradost.cloudstream3.utils.DataStoreHelper.DEFAULT_HOMEPAGE_API
+        )
+    }
+
+    @Test
+    fun testRemovedSettingsSectionsNotRegistered() {
+        val screenTitles = com.lagradost.cloudstream3.ui.settings.SettingsFragmentScreen.screens.map { it.title }
+        org.junit.Assert.assertFalse(screenTitles.contains(R.string.category_updates))
+        val generalSubtitles = com.lagradost.cloudstream3.ui.settings.SettingsFragmentScreen.screens
+            .first { it.title == R.string.category_general }
+            .subtitle
+        org.junit.Assert.assertFalse(generalSubtitles.contains(R.string.pref_category_links))
+    }
+
+    @Test
+    fun testAutoPluginUpdateDetectsNewVersionAndAlwaysUpdate() {
+        val repoData = com.lagradost.cloudstream3.ui.settings.extensions.RepositoryData(
+            iconUrl = null,
+            name = "ABIDEX",
+            url = RepositoryManager.ABIDEX_REPO_URL,
+            description = null
+        )
+        val repo = Repository(
+            iconUrl = null,
+            name = "ABIDEX",
+            description = null,
+            manifestVersion = 1,
+            pluginLists = emptyList()
+        )
+        val saved = com.lagradost.cloudstream3.plugins.PluginData(
+            internalName = "AniChan",
+            url = "https://example.com/AniChan.cs3",
+            isOnline = true,
+            filePath = "/tmp/AniChan.cs3",
+            version = 18
+        )
+        val newerRemote = SitePlugin(
+            url = "https://example.com/AniChan.cs3",
+            status = 1,
+            version = 19,
+            apiVersion = 1,
+            name = "AniChan",
+            internalName = "AniChan",
+            authors = emptyList(),
+            description = null,
+            repositoryUrl = null,
+            tvTypes = null,
+            language = "en",
+            iconUrl = null,
+            fileSize = null,
+            fileHash = null
+        )
+        val sameRemote = newerRemote.copy(version = 18)
+        val alwaysUpdateRemote = newerRemote.copy(version = com.lagradost.cloudstream3.plugins.PLUGIN_VERSION_ALWAYS_UPDATE)
+
+        assertTrue(
+            com.lagradost.cloudstream3.plugins.PluginManager.OnlinePluginData(
+                saved,
+                com.lagradost.cloudstream3.plugins.PluginWrapper(repo, repoData, newerRemote)
+            ).isOutdated
+        )
+        org.junit.Assert.assertFalse(
+            com.lagradost.cloudstream3.plugins.PluginManager.OnlinePluginData(
+                saved,
+                com.lagradost.cloudstream3.plugins.PluginWrapper(repo, repoData, sameRemote)
+            ).isOutdated
+        )
+        assertTrue(
+            com.lagradost.cloudstream3.plugins.PluginManager.OnlinePluginData(
+                saved,
+                com.lagradost.cloudstream3.plugins.PluginWrapper(repo, repoData, alwaysUpdateRemote)
+            ).isOutdated
+        )
+    }
 }

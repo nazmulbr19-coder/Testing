@@ -3,28 +3,19 @@ package com.lagradost.cloudstream3.ui.settings
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
 import androidx.core.os.ConfigurationCompat
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
-import com.fasterxml.jackson.annotation.JsonAlias
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.lagradost.cloudstream3.APIHolder.allProviders
 import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CommonActivity
-import com.lagradost.cloudstream3.CommonActivity.activity
 import com.lagradost.cloudstream3.CommonActivity.showToast
-import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.databinding.AddRemoveSitesBinding
-import com.lagradost.cloudstream3.databinding.AddSiteInputBinding
 import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.network.initClient
@@ -42,19 +33,12 @@ import com.lagradost.cloudstream3.utils.BatteryOptimizationChecker.isAppRestrict
 import com.lagradost.cloudstream3.utils.BatteryOptimizationChecker.showBatteryOptimizationDialog
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showBottomDialog
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showDialog
-import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showMultiDialog
 import com.lagradost.cloudstream3.utils.SubtitleHelper
-import com.lagradost.cloudstream3.utils.UIHelper.dismissSafe
 import com.lagradost.cloudstream3.utils.UIHelper.hideKeyboard
 import com.lagradost.cloudstream3.utils.UIHelper.navigate
-import com.lagradost.cloudstream3.utils.USER_PROVIDER_API
 import com.lagradost.cloudstream3.utils.downloader.DownloadFileManagement
 import com.lagradost.cloudstream3.utils.downloader.DownloadFileManagement.getBasePath
 import com.lagradost.cloudstream3.utils.downloader.DownloadQueueManager
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonNames
 import java.util.Locale
 
 // Change local language settings in the app.
@@ -156,17 +140,6 @@ class SettingsGeneral : BasePreferenceFragmentCompat() {
         setToolBarScrollFlags()
     }
 
-    @OptIn(ExperimentalSerializationApi::class) // JsonNames is an experimental annotation for now
-    @Serializable
-    data class CustomSite(
-        @JsonProperty("parentClassName") @JsonAlias("parentJavaClass")
-        @SerialName("parentClassName") @JsonNames("parentJavaClass")
-        val parentClassName: String, // ::class.simpleName
-        @JsonProperty("name") @SerialName("name") val name: String,
-        @JsonProperty("url") @SerialName("url") val url: String,
-        @JsonProperty("lang") @SerialName("lang") val lang: String,
-    )
-
     companion object {
         fun Fragment.pickDownloadPath(uri: Uri?, path: String?) {
             if (uri == null) return
@@ -176,96 +149,6 @@ class SettingsGeneral : BasePreferenceFragmentCompat() {
             PreferenceManager.getDefaultSharedPreferences(context).edit {
                 putString(getString(R.string.download_path_key), uri.toString())
                 putString(context.getString(R.string.download_path_key_visual), visual)
-            }
-        }
-
-        fun getCurrent(): MutableList<CustomSite> {
-            return getKey<Array<CustomSite>>(USER_PROVIDER_API)?.toMutableList()
-                ?: mutableListOf()
-        }
-        fun showAdd() {
-            val providers = allProviders.distinctBy { it::class }.sortedBy { it.name }
-            val context = activity
-            context?.showDialog(
-                providers.map { "${it.name} (${it.mainUrl})" },
-                -1,
-                context.getString(R.string.add_site_pref),
-                true,
-                {}) { selection ->
-                val provider = providers.getOrNull(selection) ?: return@showDialog
-
-                val binding : AddSiteInputBinding = AddSiteInputBinding.inflate(LayoutInflater.from(
-                    context
-                ),null,false)
-
-                val builder =
-                    AlertDialog.Builder(context, R.style.AlertDialogCustom)
-                        .setView(binding.root)
-
-                val dialog = builder.create()
-                dialog.show()
-
-                binding.text2.text = provider.name
-                binding.applyBtt.setOnClickListener {
-                    val name = binding.siteNameInput.text?.toString()
-                    val url = binding.siteUrlInput.text?.toString()
-                    val lang = binding.siteLangInput.text?.toString()
-                    val realLang = if (lang.isNullOrBlank()) provider.lang else lang
-                    val simpleName = provider::class.simpleName
-                    if (url.isNullOrBlank() || name.isNullOrBlank() || simpleName == null) {
-                        showToast(R.string.error_invalid_data, Toast.LENGTH_SHORT)
-                        return@setOnClickListener
-                    }
-
-                    val current = getCurrent()
-                    val newSite = CustomSite(simpleName, name, url, realLang)
-                    current.add(newSite)
-                    setKey(USER_PROVIDER_API, current.toTypedArray())
-                    // reload apis
-                    MainActivity.afterPluginsLoadedEvent.invoke(false)
-
-                    dialog.dismissSafe(activity)
-                }
-                binding.cancelBtt.setOnClickListener {
-                    dialog.dismissSafe(activity)
-                }
-            }
-        }
-
-        fun showDelete() {
-            val current = getCurrent()
-            val context = activity
-            context?.showMultiDialog(
-                current.map { it.name },
-                listOf(),
-                context.getString(R.string.remove_site_pref),
-                {}) { indexes ->
-                current.removeAll(indexes.map { current[it] })
-                setKey(USER_PROVIDER_API, current.toTypedArray())
-            }
-        }
-
-        fun showAddOrDelete() {
-            val context = activity
-
-            val binding : AddRemoveSitesBinding = AddRemoveSitesBinding.inflate(
-                LayoutInflater.from(
-                    context
-                ),null,false)
-            val builder =
-                AlertDialog.Builder(context ?: return, R.style.AlertDialogCustom)
-                    .setView(binding.root)
-
-            val dialog = builder.create()
-            dialog.show()
-
-            binding.addSite.setOnClickListener {
-                showAdd()
-                dialog.dismissSafe(activity)
-            }
-            binding.removeSite.setOnClickListener {
-                showDelete()
-                dialog.dismissSafe(activity)
             }
         }
     }
@@ -316,17 +199,6 @@ class SettingsGeneral : BasePreferenceFragmentCompat() {
         }
 
 
-
-        getPref(R.string.override_site_key)?.setOnPreferenceClickListener { _ ->
-
-            if (getCurrent().isEmpty()) {
-                showAdd()
-            } else {
-                showAddOrDelete()
-            }
-
-            return@setOnPreferenceClickListener true
-        }
 
         getPref(R.string.legal_notice_key)?.setOnPreferenceClickListener {
             val builder: AlertDialog.Builder =

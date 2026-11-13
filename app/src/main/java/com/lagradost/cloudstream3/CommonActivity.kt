@@ -270,24 +270,8 @@ object CommonActivity {
             Log.w(TAG, "registerForActivityResult skipped or failed: ${t.message}")
         }
 
-        // Ask for notification permissions on Android 13
-        // Not while biometric locked, the dialog cancels the biometric prompt
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !isAuthEnabled(componentActivity) &&
-            ContextCompat.checkSelfPermission(
-                componentActivity,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            val requestPermissionLauncher = componentActivity.registerForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ) { isGranted: Boolean ->
-                Log.d(TAG, "Notification permission: $isGranted")
-            }
-            requestPermissionLauncher.launch(
-                Manifest.permission.POST_NOTIFICATIONS
-            )
-        }
+        // Automatic notification permission popup on startup removed per user preference.
+        // Permission is requested contextually when initiating downloads or background tasks.
     }
 
     /** Enters pip mode if it is both possible and desired to do so*/
