@@ -7,7 +7,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.navigation.fragment.findNavController
 import androidx.preference.PreferenceManager
-import com.lagradost.cloudstream3.BuildConfig
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.databinding.FragmentSetupLanguageBinding
@@ -42,12 +41,9 @@ class SetupFragmentLanguage : BaseFragment<FragmentSetupLanguageBinding>(
             binding.apply {
                 // Icons may crash on some weird android versions?
                 safe {
-                    val drawable = when {
-                        BuildConfig.DEBUG -> R.drawable.cloud_2_gradient_debug
-                        BuildConfig.FLAVOR == "prerelease" -> R.drawable.cloud_2_gradient_beta
-                        else -> R.drawable.cloud_2_gradient
-                    }
-                    appIconImage.setImageDrawable(ContextCompat.getDrawable(ctx, drawable))
+                    appIconImage.setImageDrawable(
+                        ContextCompat.getDrawable(ctx, R.drawable.abidex_launcher_icon)
+                    )
                 }
 
                 val tags = appLanguages.map { it.second }
