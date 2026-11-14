@@ -1,0 +1,118 @@
+name: Build Signed Release APK
+
+on:
+  push:
+    branches: [ "master", "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-release:
+    name: Build Signed Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Accept Android SDK licenses
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [ -d "$SDK_ROOT" ]; then
+            mkdir -p "$SDK_ROOT/licenses"
+            SDKMANAGER=""
+            for candidate in \
+              "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+              "$SDK_ROOT/cmdline-tools/bin/sdkmanager" \
+              "$SDK_ROOT/tools/bin/sdkmanager"; do
+              if [ -x "$candidate" ]; then
+                SDKMANAGER="$candidate"
+                break
+              fi
+            done
+            if [ -n "$SDKMANAGER" ]; then
+              yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
+            fi
+          fi
+
+      - name: Prepare release signing keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          SECRET_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          SECRET_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          KEYSTORE_FILE="${{ runner.temp }}/release-keystore.jks"
+          B64_DATA="${RELEASE_KEYSTORE_BASE64:-$KEYSTORE_BASE64}"
+
+          if [ -n "$B64_DATA" ] && [ -n "$SECRET_STORE_PASSWORD" ]; then
+            echo "$B64_DATA" | base64 -d > "$KEYSTORE_FILE"
+            STORE_PASS="$SECRET_STORE_PASSWORD"
+            KEY_PASS="${SECRET_KEY_PASSWORD:-$SECRET_STORE_PASSWORD}"
+            echo "Using release signing keystore from GitHub Secrets (alias: upload)."
+          else
+            echo "::notice::RELEASE_KEYSTORE_BASE64 / STORE_PASSWORD secrets not configured; generating a fresh release keystore with alias 'upload'. Add GitHub Secrets RELEASE_KEYSTORE_BASE64, STORE_PASSWORD, and KEY_PASSWORD for persistent app update signing."
+            STORE_PASS="abidexrelease123"
+            KEY_PASS="$STORE_PASS"
+            rm -f "$KEYSTORE_FILE"
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_FILE" \
+              -storepass "$STORE_PASS" \
+              -alias upload \
+              -keypass "$KEY_PASS" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=ABIDEX,O=ABIDEX,C=US"
+          fi
+
+          {
+            echo "KEYSTORE_PATH=$KEYSTORE_FILE"
+            echo "STORE_PASSWORD=$STORE_PASS"
+            echo "KEY_PASSWORD=$KEY_PASS"
+          } >> "$GITHUB_ENV"
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Signed Release APK
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Verify Signed Release APK
+        run: |
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "::error::Expected signed release APK was not generated at $APK_PATH"
+            exit 1
+          fi
+          echo "Found signed release APK:"
+          ls -lh "$APK_PATH"
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER="$(ls -1d "$SDK_ROOT"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -x "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs "$APK_PATH"
+          else
+            echo "apksigner not found on PATH; APK built with release signingConfig."
+          fi
+
+      - name: Upload Signed Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
