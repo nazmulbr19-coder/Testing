@@ -492,7 +492,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             !listOf(
                 R.id.navigation_results_phone,
                 R.id.navigation_results_tv,
-                R.id.navigation_player
+                R.id.navigation_player,
+                R.id.navigation_tetris
             ).contains(destination.id)
 
         val isNavVisible = listOf(
@@ -766,6 +767,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
 
                 for (focusView in arrayOf(
                     R.id.navigation_downloads,
+                    R.id.navigation_tetris,
                     R.id.navigation_home,
                     R.id.navigation_search,
                     R.id.navigation_library,
@@ -1757,6 +1759,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 R.id.navigation_search,
                 R.id.navigation_library,
                 R.id.navigation_downloads,
+                R.id.navigation_tetris,
                 R.id.navigation_settings
             )) {
                 val view = rail.findViewById<View?>(id) ?: continue

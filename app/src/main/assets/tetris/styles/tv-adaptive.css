@@ -1,0 +1,135 @@
+/* Adaptive layout, touch responsiveness, and TV Remote (D-Pad) focus polish */
+button,
+input,
+.playgroundButton,
+.gameMode,
+.controlButton {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Orbitron', 'Rajdhani', 'Roboto', system-ui, sans-serif;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+/* Prevent the main menu from overflowing shorter screens (landscape phones / TVs) */
+.titleImage {
+  margin: 0.9em 1.2em 0.6em;
+  flex-shrink: 1;
+}
+
+.titleImage img {
+  max-height: 76px;
+  width: auto;
+  max-width: min(52vw, 380px);
+}
+
+.mainContainer {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: flex-start;
+  justify-content: center;
+  padding-bottom: 0.5em;
+}
+
+.mainMenu {
+  margin-top: min(4vh, 2.2em) !important;
+  max-width: 520px;
+  width: min(86%, 520px);
+  padding: 1.4em 1.6em;
+}
+
+.menuButtonContainer {
+  margin: 0.7em 0;
+}
+
+/* Hide footer during active mobile play so it never covers bottom touch controls */
+body.mobile-playing footer {
+  display: none !important;
+}
+
+/* Android TV / D-pad mode */
+html.tv-mode #touchControlContainer {
+  display: none !important;
+}
+
+html.tv-mode .titleImage {
+  margin: 0.5em 0.8em 0.4em;
+}
+
+html.tv-mode .titleImage img {
+  max-height: 54px;
+}
+
+html.tv-mode .mainContainer {
+  align-items: center;
+  max-width: 960px;
+}
+
+html.tv-mode footer {
+  padding: 0.45em;
+  font-size: 0.72rem;
+}
+
+/* High-contrast D-pad focus indicator for TV remote navigation */
+.tv-focused {
+  outline: 3px solid #ffd600 !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 16px rgba(255, 214, 0, 0.85) !important;
+  transform: scale(1.03);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  z-index: 5;
+}
+
+#musicBoxContainer.tv-focused {
+  background-color: rgba(255, 214, 0, 0.35);
+  border-radius: 6px;
+}
+
+/* Phone portrait fitting so board + side boxes + touch pad never get cut off */
+@media screen and (max-width: 720px) {
+  .titleImage {
+    margin: 0.45em 0.5em 0.25em;
+  }
+
+  .titleImage img {
+    max-height: 44px;
+  }
+
+  .mainMenu {
+    margin-top: 1.5em !important;
+    padding: 1em 1.2em;
+  }
+
+  .gameMode {
+    font-size: 1.45em;
+  }
+
+  .sidePanel {
+    padding: 0.45em;
+  }
+
+  .spLeft {
+    margin-right: 0.4em;
+  }
+
+  .spRight {
+    margin-left: 0.4em;
+  }
+
+  .grid {
+    margin: 0.45em;
+  }
+
+  #touchControlContainer {
+    height: 155px;
+    padding-top: 0.35em;
+    flex-shrink: 0;
+  }
+
+  .controlBlock {
+    height: 145px;
+  }
+}

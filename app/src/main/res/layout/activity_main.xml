@@ -34,7 +34,7 @@
                               app:labelVisibilityMode="unlabeled"
 
                   -->
-        <com.google.android.material.bottomnavigation.BottomNavigationView
+        <com.lagradost.cloudstream3.ui.SixItemBottomNavigationView
             android:id="@+id/nav_view"
             android:layout_height="@dimen/nav_view_height"
             android:layout_width="0dp"

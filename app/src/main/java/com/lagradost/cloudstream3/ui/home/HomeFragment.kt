@@ -749,9 +749,10 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                         val hasNoNetworkConnection = context?.isNetworkAvailable() == false
                         val isNetworkError = data.isNetworkError
 
-                        // Show the downloads button if we have any sort of network shenanigans
-                        homeReloadConnectionGoToDownloads.isVisible =
-                            hasNoNetworkConnection || isNetworkError
+                        // Show the downloads and offline game buttons if we have any sort of network shenanigans
+                        val showOfflineActions = hasNoNetworkConnection || isNetworkError
+                        homeReloadConnectionGoToDownloads.isVisible = showOfflineActions
+                        homeReloadConnectionGoToGame.isVisible = showOfflineActions
 
                         // Only hide the open in browser button if we know this is not network shenanigans related to cs3
                         homeReloadConnectionOpenInBrowser.isGone = hasNoNetworkConnection
@@ -764,6 +765,10 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
 
                         homeReloadConnectionGoToDownloads.setOnClickListener {
                             activity.navigate(R.id.navigation_downloads)
+                        }
+
+                        homeReloadConnectionGoToGame.setOnClickListener {
+                            activity.navigate(R.id.global_to_navigation_tetris)
                         }
 
                         (homeMasterRecycler.adapter as? ParentItemAdapter)?.apply {

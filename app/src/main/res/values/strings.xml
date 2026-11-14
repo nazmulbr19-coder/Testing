@@ -814,4 +814,40 @@
     </plurals>
     <string name="player_is_live">Live</string>
     <string name="installed_plugins">Installed plugins</string>
+    <string name="play_game">Play Game</string>
+    <string name="tetris_title">Tetris</string>
+    <string name="tetris_subtitle">Offline Arcade</string>
+    <string name="tetris_mode_enduro">Enduro</string>
+    <string name="tetris_mode_enduro_desc">Endless survival • Speed up every 10 lines</string>
+    <string name="tetris_mode_rush">Rush</string>
+    <string name="tetris_mode_rush_desc">60 seconds score attack • Speed up every 5 lines</string>
+    <string name="tetris_mode_sprint">Sprint</string>
+    <string name="tetris_mode_sprint_desc">Clear 20 lines as fast as possible</string>
+    <string name="tetris_score">Score</string>
+    <string name="tetris_lines">Lines</string>
+    <string name="tetris_level">Level</string>
+    <string name="tetris_time">Time</string>
+    <string name="tetris_best">Best</string>
+    <string name="tetris_next">Next</string>
+    <string name="tetris_paused">Paused</string>
+    <string name="tetris_game_over">Game Over</string>
+    <string name="tetris_time_up">Time Up!</string>
+    <string name="tetris_sprint_complete">Sprint Complete!</string>
+    <string name="tetris_resume">Resume</string>
+    <string name="tetris_play_again">Play Again</string>
+    <string name="tetris_restart">Restart</string>
+    <string name="tetris_exit">Exit</string>
+    <string name="tetris_pause">Pause</string>
+    <string name="tetris_rotate">Rotate</string>
+    <string name="tetris_drop">Drop</string>
+    <string name="tetris_hard_drop">Hard Drop</string>
+    <string name="tetris_move_left">Move Left</string>
+    <string name="tetris_move_right">Move Right</string>
+    <string name="tetris_tv_controls_title">TV Remote Controls</string>
+    <string name="tetris_tv_controls_move">◀ ▶  Move left / right</string>
+    <string name="tetris_tv_controls_rotate">▲  Rotate piece</string>
+    <string name="tetris_tv_controls_soft">▼  Soft drop</string>
+    <string name="tetris_tv_controls_hard">OK / Center  Hard drop</string>
+    <string name="tetris_tv_controls_pause">Back / Play-Pause  Pause menu</string>
 </resources>
+
