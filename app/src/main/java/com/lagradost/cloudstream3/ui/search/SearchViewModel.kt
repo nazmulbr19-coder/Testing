@@ -24,6 +24,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 
 data class ExpandableSearchList(
@@ -62,7 +64,8 @@ class SearchViewModel : ViewModel() {
     /** Save which providers can searched again and which search result page they are on.
      * Maps provider name to search list.
      * @see [HomeViewModel.expandable] */
-    private val expandableSearches: MutableMap<String, ExpandableSearchList> = mutableMapOf()
+    private val expandableSearches: MutableMap<String, ExpandableSearchList> =
+        Collections.synchronizedMap(LinkedHashMap())
 
     private var currentSearchIndex = 0
     private var onGoingSearch: Job? = null
@@ -118,50 +121,53 @@ class SearchViewModel : ViewModel() {
         _searchSuggestions.postValue(emptyList())
     }
 
-    private val lock: MutableSet<String> = mutableSetOf()
+    private val lock: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     // ExpandableHomepageList because the home adapter is reused in the search fragment
     suspend fun expandAndReturn(name: String): HomeViewModel.ExpandableHomepageList? {
-        if (lock.contains(name)) return null
-        val query = lastQuery ?: return null
-        val repo = repos.find { it.name == name } ?: return null
+        if (!lock.add(name)) return null
+        try {
+            val query = lastQuery ?: return null
+            val repo = repos.find { it.name == name } ?: return null
 
-        lock += name
-
-        expandableSearches[name]?.let { current ->
-            debugAssert({ !current.hasNext }) {
-                "Expand called when not needed"
-            }
-
-            val nextPage = current.currentPage + 1
-            val next = repo.search(query, nextPage)
-            if (next is Resource.Success) {
-                val nextValue = next.value
-                expandableSearches[name]?.apply {
-                    this.hasNext = nextValue.hasNext
-                    this.currentPage = nextPage
-
-                    debugWarning({ nextValue.items.any { outer -> this.list.any { it.url == outer.url } } }) {
-                        "Expanded search contained an item that was previously already in the list.\nQuery = $query, ${nextValue.items} = ${this.list}"
-                    }
-
-                    // just to be sure we are not adding the same shit for some reason
-                    // Avoids weird behavior in the recyclerview by recreating the list
-                    this.list = (this.list + nextValue.items).distinctBy { it.url }
-                } ?: debugWarning {
-                    "Expanded an item not in search load named $name, current list is ${expandableSearches.keys}"
+            val current = synchronized(expandableSearches) { expandableSearches[name] }
+            current?.let {
+                debugAssert({ !it.hasNext }) {
+                    "Expand called when not needed"
                 }
-            } else {
-                current.hasNext = false
-            }
 
-            _searchResponse.postValue(Resource.Success(bundleSearch(expandableSearches)))
-            _currentSearch.postValue(expandableSearches)
+                val nextPage = it.currentPage + 1
+                val next = repo.search(query, nextPage)
+                if (next is Resource.Success) {
+                    val nextValue = next.value
+                    synchronized(expandableSearches) {
+                        expandableSearches[name]?.apply {
+                            this.hasNext = nextValue.hasNext
+                            this.currentPage = nextPage
+
+                            debugWarning({ nextValue.items.any { outer -> this.list.any { existing -> existing.url == outer.url } } }) {
+                                "Expanded search contained an item that was previously already in the list.\nQuery = $query, ${nextValue.items} = ${this.list}"
+                            }
+
+                            // Avoids weird behavior in the recyclerview by recreating the list
+                            this.list = (this.list + nextValue.items).distinctBy { existing -> existing.url }
+                        } ?: debugWarning {
+                            "Expanded an item not in search load named $name, current list is ${expandableSearches.keys}"
+                        }
+                    }
+                } else {
+                    it.hasNext = false
+                }
+
+                val snapshot = synchronized(expandableSearches) { LinkedHashMap(expandableSearches) }
+                _searchResponse.postValue(Resource.Success(bundleSearch(snapshot)))
+                _currentSearch.postValue(snapshot)
+            }
+        } finally {
+            lock.remove(name)
         }
 
-        lock -= name
-
-        val item = expandableSearches[name] ?: return null
+        val item = synchronized(expandableSearches) { expandableSearches[name] } ?: return null
         return HomeViewModel.ExpandableHomepageList(
             HomePageList(name, item.list),
             item.currentPage,
@@ -169,7 +175,7 @@ class SearchViewModel : ViewModel() {
         )
     }
 
-    private fun bundleSearch(lists: MutableMap<String, ExpandableSearchList>): ExpandableSearchList {
+    private fun bundleSearch(lists: Map<String, ExpandableSearchList>): ExpandableSearchList {
         if (lists.size == 1) {
             return lists.values.first()
         }
@@ -208,20 +214,6 @@ class SearchViewModel : ViewModel() {
                 return@launchSafe
             }
 
-            if (!isQuickSearch) {
-                val key = query.hashCode().toString()
-                setKey(
-                    "$currentAccount/$SEARCH_HISTORY_KEY",
-                    key,
-                    SearchHistoryItem(
-                        searchedAt = System.currentTimeMillis(),
-                        searchText = query,
-                        type = emptyList(), // TODO implement tv type
-                        key = key,
-                    )
-                )
-            }
-
             _searchResponse.postValue(Resource.Loading())
             _currentSearch.postValue(emptyMap())
             expandableSearches.clear()
@@ -229,6 +221,20 @@ class SearchViewModel : ViewModel() {
             lastQuery = query
 
             withContext(Dispatchers.IO) { // This interrupts UI otherwise
+                if (!isQuickSearch) {
+                    val key = query.hashCode().toString()
+                    setKey(
+                        "$currentAccount/$SEARCH_HISTORY_KEY",
+                        key,
+                        SearchHistoryItem(
+                            searchedAt = System.currentTimeMillis(),
+                            searchText = query,
+                            type = emptyList(), // TODO implement tv type
+                            key = key,
+                        )
+                    )
+                }
+
                 repos.filter { a ->
                     (ignoreSettings || (providersActive.isEmpty() || providersActive.contains(a.name))) && (!isQuickSearch || a.hasQuickSearch)
                 }.amap { a -> // Parallel
@@ -238,15 +244,16 @@ class SearchViewModel : ViewModel() {
                         val searchValue = search.value
                         expandableSearches[a.name] =
                             ExpandableSearchList(searchValue.items, 1, searchValue.hasNext)
+                        val snapshot = synchronized(expandableSearches) { LinkedHashMap(expandableSearches) }
+                        _currentSearch.postValue(snapshot)
                     }
-
-                    _currentSearch.postValue(expandableSearches)
                 }
 
                 if (currentSearchIndex != currentIndex) return@withContext // this should prevent rewrite of existing data bug
 
-                _currentSearch.postValue(expandableSearches)
-                val list = bundleSearch(expandableSearches)
+                val snapshot = synchronized(expandableSearches) { LinkedHashMap(expandableSearches) }
+                _currentSearch.postValue(snapshot)
+                val list = bundleSearch(snapshot)
 
                 _searchResponse.postValue(Resource.Success(list))
             }

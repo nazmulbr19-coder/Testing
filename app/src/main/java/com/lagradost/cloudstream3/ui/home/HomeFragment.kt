@@ -72,6 +72,7 @@ import com.lagradost.cloudstream3.utils.BackPressedCallbackHelper
 import com.lagradost.cloudstream3.utils.BackPressedCallbackHelper.attachBackPressedCallback
 import com.lagradost.cloudstream3.utils.BackPressedCallbackHelper.detachBackPressedCallback
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
+import com.lagradost.cloudstream3.utils.Coroutines.main
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.EmptyEvent
 import com.lagradost.cloudstream3.utils.SubtitleHelper.getFlagFromIso
@@ -240,7 +241,8 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                     if (!recyclerView.isRecyclerScrollable() && currentHasNext && expandCount != count) {
                         expandCount = count
                         ioSafe {
-                            expandCallback?.invoke(name)?.let { newExpand ->
+                            val newExpand = expandCallback?.invoke(name) ?: return@ioSafe
+                            main {
                                 (recyclerView.adapter as? SearchAdapter?)?.apply {
                                     hasNext = newExpand.hasNext
                                     submitList(newExpand.list.list)
@@ -345,6 +347,8 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                                     logError(e)
                                 }
                             }
+                        } else {
+                            settingsIcon.setOnClickListener(null)
                         }
 
                         return view
@@ -613,6 +617,8 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
 
 
             homeMasterRecycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                private val tvLocationBuffer = IntArray(2)
+
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     if (isLayout(PHONE)) {
                         // Fab is only relevant to Phone
@@ -620,10 +626,8 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                             homeApiFab.shrink() // hide
                             homeRandom.shrink()
                         } else if (dy < -5) {
-                            if (isLayout(PHONE)) {
-                                homeApiFab.extend() // show
-                                homeRandom.extend()
-                            }
+                            homeApiFab.extend() // show
+                            homeRandom.extend()
                         }
                     } else {
                         // Header scrolling is only relevant to TV/Emulator
@@ -635,32 +639,16 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
                             // The first view is not visible, so we can assume we have scrolled past it
                             scrollParent.isVisible = false
                         } else {
-                            // A bit weird, but this is a major limitation we are working around here
-                            // 1. We cant have a real parent to the recyclerview as android cant layout that without lagging
-                            // 2. We cant put the view in the recyclerview, as it should always be shown
-                            // 3. We cant mirror the view in the recyclerview as then it causes focus issues when swaping out the mirror view
-                            //
-                            // This means that if we want to have a parent view to the recyclerview we are out of luck
-                            // Instead this uses getLocationInWindow to calculate how much the view should be scrolled
-                            // as recyclerView has no scrollY (always 0)
-                            //
-                            // Then it manually "scrolls" it to the correct position
-                            //
-                            // Hopefully getLocationInWindow acts correctly on all devices
-                            val rect = IntArray(2)
-                            view.getLocationInWindow(rect)
+                            view.getLocationInWindow(tvLocationBuffer)
+                            val targetTranslationY = tvLocationBuffer[1].toFloat() - 60.toPx
                             scrollParent.isVisible = true
-                            scrollParent.translationY = rect[1].toFloat() - 60.toPx
+                            scrollParent.translationY = targetTranslationY
 
                             // Move the TV layout real time clock out of the way too
                             // We check if we have the correct layout and if the clock is enabled
-                            if(isLayout(TV) && binding.homeClock.isVisible) {
-                                val scrollParent = binding.homeClock
-
-                                val rect = IntArray(2)
-                                view.getLocationInWindow(rect)
-                                scrollParent.isVisible = true
-                                scrollParent.translationY = rect[1].toFloat() - 60.toPx
+                            if (isLayout(TV) && binding.homeClock.isVisible) {
+                                binding.homeClock.isVisible = true
+                                binding.homeClock.translationY = targetTranslationY
                             }
                         }
                     }

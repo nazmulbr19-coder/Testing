@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * @param alwaysBypass will pre-emptively fetch ddos guard cookies if true.
@@ -16,8 +17,9 @@ import okhttp3.Response
 // As seen in https://github.com/anime-dl/anime-downloader/blob/master/anime_downloader/sites/erairaws.py
 @AnyThread
 class DdosGuardKiller(private val alwaysBypass: Boolean) : Interceptor {
-    val savedCookiesMap = mutableMapOf<String, Map<String, String>>()
+    val savedCookiesMap: MutableMap<String, Map<String, String>> = ConcurrentHashMap()
 
+    @Volatile
     private var ddosBypassPath: String? = null
 
     override fun intercept(chain: Interceptor.Chain): Response = runBlocking {
@@ -26,6 +28,7 @@ class DdosGuardKiller(private val alwaysBypass: Boolean) : Interceptor {
 
         val response = chain.proceed(request)
         return@runBlocking if (response.code == 403) {
+            response.close()
             bypassDdosGuard(request)
         } else response
     }

@@ -678,6 +678,9 @@ class CS3IPlayer : IPlayer {
          * 3. Disk usage, as we simply use the same folder
          * */
         private var cronetEngine: CronetEngine? = null
+        private val cronetExecutor by lazy { Executors.newSingleThreadExecutor() }
+        @Volatile
+        private var hasConfiguredSsl = false
 
         /**
          * How many active sessions we have.
@@ -813,7 +816,7 @@ class CS3IPlayer : IPlayer {
                     OkHttpDataSource.Factory(app.baseClient).setUserAgent(userAgent)
                 } else {
                     Log.d(TAG, "Using CronetDataSource for $link")
-                    CronetDataSource.Factory(engine, Executors.newSingleThreadExecutor())
+                    CronetDataSource.Factory(engine, cronetExecutor)
                         .setUserAgent(userAgent)
                         .setConnectionTimeoutMs(CRONET_TIMEOUT_MS)
                         .setReadTimeoutMs(CRONET_TIMEOUT_MS)
@@ -1953,8 +1956,8 @@ class CS3IPlayer : IPlayer {
 
             currentLink = link
 
-            if (ignoreSSL) {
-                // Disables ssl check
+            if (ignoreSSL && !hasConfiguredSsl) {
+                // Disables ssl check once
                 val sslContext: SSLContext = SSLContext.getInstance("TLS")
                 sslContext.init(null, arrayOf(SSLTrustManager()), SecureRandom())
                 sslContext.createSSLEngine()
@@ -1962,6 +1965,7 @@ class CS3IPlayer : IPlayer {
                     true
                 }
                 HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.socketFactory)
+                hasConfiguredSsl = true
             }
 
 

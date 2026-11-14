@@ -32,6 +32,7 @@ import com.lagradost.cloudstream3.utils.downloader.VideoDownloadManager.KEY_RESU
 import com.lagradost.cloudstream3.utils.downloader.VideoDownloadManager.downloadEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -141,6 +142,8 @@ class DownloadQueueService : Service() {
         }
     }
 
+    private var queueJob: Job? = null
+
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     override fun onCreate() {
         isRunning = true
@@ -164,7 +167,7 @@ class DownloadQueueService : Service() {
 
         downloadEvent += downloadEventListener
 
-        val queueJob = ioSafe {
+        val job = ioSafe {
             // Ensure this is up to date to prevent race conditions with MainActivity launches
             setLastError(context)
             // Early return, to prevent waiting for plugins in safe mode
@@ -221,16 +224,16 @@ class DownloadQueueService : Service() {
                         queue.size
                     )
 
-                    // Cant start multiple downloads at once. If this is rerun it may start too many downloads.
+                    // Pop outside StateFlow.update because update lambdas can retry on CAS contention
                     if (newDownloads > 0) {
-                        _downloadInstances.update { instances ->
-                            val downloadInstance = DownloadQueueManager.popQueue(context)
-                            if (downloadInstance != null) {
-                                downloadInstance.startDownload()
-                                instances + downloadInstance
-                            } else {
-                                instances
-                            }
+                        val started = ArrayList<VideoDownloadManager.EpisodeDownloadInstance>(newDownloads)
+                        repeat(newDownloads) {
+                            val downloadInstance = DownloadQueueManager.popQueue(context) ?: return@repeat
+                            downloadInstance.startDownload()
+                            started.add(downloadInstance)
+                        }
+                        if (started.isNotEmpty()) {
+                            _downloadInstances.update { instances -> instances + started }
                         }
                     }
 
@@ -247,9 +250,10 @@ class DownloadQueueService : Service() {
                 }
         }
 
+        queueJob = job
         // Stop self regardless of job outcome
-        queueJob.invokeOnCompletion { throwable ->
-            if (throwable != null) {
+        job.invokeOnCompletion { throwable ->
+            if (throwable != null && throwable !is kotlinx.coroutines.CancellationException) {
                 logError(throwable)
             }
             safe {
@@ -262,6 +266,8 @@ class DownloadQueueService : Service() {
         Log.d(TAG, "Download queue service stopped.")
         downloadEvent -= downloadEventListener
         isRunning = false
+        queueJob?.cancel()
+        queueJob = null
         super.onDestroy()
     }
 

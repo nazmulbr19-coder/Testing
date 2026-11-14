@@ -65,6 +65,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
 import java.io.InputStreamReader
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 // Different keys for local and not since local can be removed at any time without app knowing, hence the local are getting rebuilt on every app start
 const val PLUGINS_KEY = "PLUGINS_KEY"
@@ -300,7 +302,7 @@ object PluginManager {
             "Outdated plugins: ${outdatedPlugins.filter { it.isOutdated }}"
         }
 
-        val updatedPlugins = mutableListOf<String>()
+        val updatedPlugins = Collections.synchronizedList(mutableListOf<String>())
 
         outdatedPlugins.amap { pluginData ->
             if (pluginData.isDisabled) {
@@ -355,7 +357,7 @@ object PluginManager {
     ) {
         assertNonRecursiveCallstack()
 
-        val newDownloadPlugins = mutableListOf<String>()
+        val newDownloadPlugins = Collections.synchronizedList(mutableListOf<String>())
         val urls = (getKey<Array<RepositoryData>>(REPOSITORIES_KEY)
             ?: emptyArray()) + PREBUILT_REPOSITORIES
         val onlinePlugins = urls.toList().amap {
@@ -488,7 +490,8 @@ object PluginManager {
     suspend fun initAbidexBuiltInRepositoryAndPlugins(activity: Activity): Int {
         Log.i(TAG, "Initializing ABIDEX built-in repository and providers...")
 
-        val builtInRepoData = RepositoryData(
+        try {
+            val builtInRepoData = RepositoryData(
             iconUrl = null,
             name = RepositoryManager.ABIDEX_REPO_NAME,
             url = RepositoryManager.ABIDEX_REPO_URL,
@@ -521,8 +524,6 @@ object PluginManager {
         if (repoPlugins == null || repoPlugins.isEmpty()) {
             val count = synchronized(plugins) { plugins.size }
             Log.i(TAG, "ABIDEX repository manifest offline. Currently loaded plugins: $count")
-            loadedOnlinePlugins = true
-            afterPluginsLoadedEvent.invoke(false)
             return count
         }
 
@@ -564,9 +565,9 @@ object PluginManager {
 
         val onlineSavedPlugins = getPluginsOnline()
 
-        // 6. Download missing/outdated plugins and load them (Auto Plugin Updates always active)
-        val processedPaths = mutableSetOf<String>()
-        for (pluginWrapper in pluginsToInstall) {
+        // 6. Download missing/outdated plugins in parallel and load them (Auto Plugin Updates always active)
+        val processedPaths: MutableSet<String> = ConcurrentHashMap.newKeySet()
+        pluginsToInstall.amap { pluginWrapper ->
             val sitePlugin = pluginWrapper.plugin
             val destinationFile = getPluginPath(activity, sitePlugin.internalName, builtInRepoData.url)
             processedPaths.add(destinationFile.absolutePath)
@@ -616,6 +617,7 @@ object PluginManager {
         if (extraSavedPlugins.isNotEmpty()) {
             try {
                 val repoUrls = ((getKey<Array<RepositoryData>>(REPOSITORIES_KEY) ?: emptyArray()) + PREBUILT_REPOSITORIES)
+                    .filter { it.url != RepositoryManager.ABIDEX_REPO_URL }
                     .distinctBy { it.url }
                 val allRemotePlugins = repoUrls.amap { repo ->
                     getRepoPlugins(repo) ?: emptyList()
@@ -647,8 +649,10 @@ object PluginManager {
             }
         }
 
-        loadedOnlinePlugins = true
-        afterPluginsLoadedEvent.invoke(false)
+        } finally {
+            loadedOnlinePlugins = true
+            afterPluginsLoadedEvent.invoke(false)
+        }
 
         val totalLoaded = synchronized(plugins) { plugins.size }
         Log.i(TAG, "ABIDEX repository initialized. Total loaded plugins: $totalLoaded")
@@ -688,64 +692,65 @@ object PluginManager {
     suspend fun ___DO_NOT_CALL_FROM_A_PLUGIN_loadAllLocalPlugins(context: Context, forceReload: Boolean) {
         assertNonRecursiveCallstack()
 
-        val dir = File(LOCAL_PLUGINS_PATH)
+        try {
+            val dir = File(LOCAL_PLUGINS_PATH)
 
-        if (!dir.exists()) {
-            val res = dir.mkdirs()
-            if (!res) {
-                Log.w(TAG, "Failed to create local directories")
-                // We have tried to load local plugins, but exit early.
-                // This needs to be true to prevent the downloader waiting for plugins.
-                loadedLocalPlugins = true
-                return
-            }
-        }
-
-        val sortedPlugins = dir.listFiles()
-        // Always sort plugins alphabetically for reproducible results
-
-        Log.d(TAG, "Files in '${LOCAL_PLUGINS_PATH}' folder: ${sortedPlugins?.size}")
-
-        // Use app-specific external files directory and copy the file there.
-        // We have to do this because on Android 14+, it otherwise gives SecurityException
-        // due to dex files and setReadOnly seems to have no effect unless it it here.
-        val pluginDirectory = File(context.getExternalFilesDir(null), "plugins")
-        if (!pluginDirectory.exists()) {
-            pluginDirectory.mkdirs() // Ensure the plugins directory exists
-        }
-
-        // Make sure all local plugins are fully refreshed.
-        removeKey(PLUGINS_KEY_LOCAL)
-
-        sortedPlugins?.sortedBy { it.name }?.amap { file ->
-            try {
-                val destinationFile = File(pluginDirectory, file.name)
-
-                // Only copy the file if the destination file doesn't exist or if it
-                // has been modified (check file length and modification time).
-                if (!destinationFile.exists() ||
-                    destinationFile.length() != file.length() ||
-                    destinationFile.lastModified() != file.lastModified()
-                ) {
-
-                    // Copy the file to the app-specific plugin directory
-                    file.copyTo(destinationFile, overwrite = true)
-
-                    // After copying, set the destination file's modification time
-                    // to match the source file. We do this for performance so that we
-                    // can check the modification time and not make redundant writes.
-                    destinationFile.setLastModified(file.lastModified())
+            if (!dir.exists()) {
+                val res = dir.mkdirs()
+                if (!res) {
+                    Log.w(TAG, "Failed to create local directories")
+                    // We have tried to load local plugins, but exit early.
+                    // This needs to be true to prevent the downloader waiting for plugins.
+                    return
                 }
-
-                // Load the plugin after it has been copied
-                maybeLoadPlugin(context, destinationFile)
-            } catch (t: Throwable) {
-                Log.e(TAG, "Failed to copy the file")
-                logError(t)
             }
-        }
 
-        loadedLocalPlugins = true
+            val sortedPlugins = dir.listFiles()
+            // Always sort plugins alphabetically for reproducible results
+
+            Log.d(TAG, "Files in '${LOCAL_PLUGINS_PATH}' folder: ${sortedPlugins?.size}")
+
+            // Use app-specific external files directory and copy the file there.
+            // We have to do this because on Android 14+, it otherwise gives SecurityException
+            // due to dex files and setReadOnly seems to have no effect unless it it here.
+            val pluginDirectory = File(context.getExternalFilesDir(null), "plugins")
+            if (!pluginDirectory.exists()) {
+                pluginDirectory.mkdirs() // Ensure the plugins directory exists
+            }
+
+            // Make sure all local plugins are fully refreshed.
+            removeKey(PLUGINS_KEY_LOCAL)
+
+            sortedPlugins?.sortedBy { it.name }?.amap { file ->
+                try {
+                    val destinationFile = File(pluginDirectory, file.name)
+
+                    // Only copy the file if the destination file doesn't exist or if it
+                    // has been modified (check file length and modification time).
+                    if (!destinationFile.exists() ||
+                        destinationFile.length() != file.length() ||
+                        destinationFile.lastModified() != file.lastModified()
+                    ) {
+
+                        // Copy the file to the app-specific plugin directory
+                        file.copyTo(destinationFile, overwrite = true)
+
+                        // After copying, set the destination file's modification time
+                        // to match the source file. We do this for performance so that we
+                        // can check the modification time and not make redundant writes.
+                        destinationFile.setLastModified(file.lastModified())
+                    }
+
+                    // Load the plugin after it has been copied
+                    maybeLoadPlugin(context, destinationFile)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Failed to copy the file")
+                    logError(t)
+                }
+            }
+        } finally {
+            loadedLocalPlugins = true
+        }
         afterPluginsLoadedEvent.invoke(forceReload)
     }
 
@@ -790,6 +795,11 @@ object PluginManager {
                 logError(t)
             }
 
+            if (synchronized(plugins) { plugins.containsKey(filePath) }) {
+                Log.i(TAG, "Plugin $fileName is already loaded")
+                return true
+            }
+
             val loader = PathClassLoader(filePath, context.classLoader)
             var manifest: BasePlugin.Manifest
             loader.getResourceAsStream("manifest.json").use { stream ->
@@ -818,11 +828,6 @@ object PluginManager {
             // Sets with the proper version
             setPluginData(data.copy(version = version))
 
-            if (plugins.containsKey(filePath)) {
-                Log.i(TAG, "Plugin with name $name already exists")
-                return true
-            }
-
             pluginInstance.filename = file.absolutePath
             if (manifest.requiresResources) {
                 Log.d(TAG, "Loading resources for ${data.internalName}")
@@ -839,8 +844,17 @@ object PluginManager {
                     context.resources.configuration
                 )
             }
-            synchronized(plugins) {
-                plugins[filePath] = pluginInstance
+            val alreadyLoaded = synchronized(plugins) {
+                if (plugins.containsKey(filePath)) {
+                    true
+                } else {
+                    plugins[filePath] = pluginInstance
+                    false
+                }
+            }
+            if (alreadyLoaded) {
+                Log.i(TAG, "Plugin with name $name already exists")
+                return true
             }
             synchronized(classLoaders) {
                 classLoaders[loader] = pluginInstance
@@ -854,7 +868,6 @@ object PluginManager {
                 pluginInstance.load()
             }
             Log.i(TAG, "Loaded plugin ${data.internalName} successfully")
-            currentlyLoading = null
             true
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to load $file: ${Log.getStackTraceString(e)}")
@@ -863,14 +876,17 @@ object PluginManager {
                 context.getString(R.string.plugin_load_fail).format(fileName),
                 Toast.LENGTH_LONG
             )
-            currentlyLoading = null
             false
+        } finally {
+            if (currentlyLoading == fileName) {
+                currentlyLoading = null
+            }
         }
     }
 
     fun unloadPlugin(absolutePath: String) {
         Log.i(TAG, "Unloading plugin: $absolutePath")
-        val plugin = plugins[absolutePath]
+        val plugin = synchronized(plugins) { plugins[absolutePath] }
         if (plugin == null) {
             Log.w(TAG, "Couldn't find plugin $absolutePath")
             return
@@ -1031,7 +1047,7 @@ object PluginManager {
                 }
         }.distinctBy { it.onlineData.plugin.url }
 
-        val updatedPlugins = mutableListOf<String>()
+        val updatedPlugins = Collections.synchronizedList(mutableListOf<String>())
 
         allPlugins.amap { pluginData ->
             if (pluginData.isDisabled) {

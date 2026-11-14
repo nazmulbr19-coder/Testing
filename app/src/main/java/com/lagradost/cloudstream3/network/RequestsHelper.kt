@@ -25,16 +25,31 @@ fun Requests.initClient(context: Context, ignoreSSL: Boolean = false) {
     this.baseClient = buildDefaultClient(context, ignoreSSL)
 }
 
+@Volatile
+private var conscryptInstalled = false
 
 // Backwards compatible constructor, mark as deprecated later
 fun buildDefaultClient(context: Context): OkHttpClient {
-    return buildDefaultClient(context, false)
+    return buildDefaultClient(context, false, true)
+}
+
+fun buildDefaultClient(context: Context, ignoreSSL: Boolean = false): OkHttpClient {
+    return buildDefaultClient(context, ignoreSSL, true)
 }
 
 /** Only use ignoreSSL if you know what you are doing*/
-fun buildDefaultClient(context: Context, ignoreSSL: Boolean = false): OkHttpClient {
-    safe { Security.insertProviderAt(Conscrypt.newProvider(), 1) }
-    
+fun buildDefaultClient(
+    context: Context,
+    ignoreSSL: Boolean = false,
+    enableCache: Boolean = true
+): OkHttpClient {
+    if (!conscryptInstalled) {
+        safe {
+            Security.insertProviderAt(Conscrypt.newProvider(), 1)
+            conscryptInstalled = true
+        }
+    }
+
     val settingsManager = PreferenceManager.getDefaultSharedPreferences(context)
     val dns = settingsManager.getInt(context.getString(R.string.dns_key), 0)
     val baseClient = OkHttpClient.Builder()
@@ -44,15 +59,17 @@ fun buildDefaultClient(context: Context, ignoreSSL: Boolean = false): OkHttpClie
             if (ignoreSSL) {
                 ignoreAllSSLErrors()
             }
-        }
-        .cache(
-            // Note that you need to add a ResponseInterceptor to make this 100% active.
-            // The server response dictates if and when stuff should be cached.
-            Cache(
-                directory = File(context.cacheDir, "http_cache"),
-                maxSize = 50L * 1024L * 1024L // 50 MiB
-            )
-        ).apply {
+            if (enableCache) {
+                cache(
+                    // Note that you need to add a ResponseInterceptor to make this 100% active.
+                    // The server response dictates if and when stuff should be cached.
+                    Cache(
+                        directory = File(context.cacheDir, "http_cache"),
+                        maxSize = 50L * 1024L * 1024L // 50 MiB
+                    )
+                )
+            }
+        }.apply {
             when (dns) {
                 1 -> addGoogleDns()
                 2 -> addCloudFlareDns()

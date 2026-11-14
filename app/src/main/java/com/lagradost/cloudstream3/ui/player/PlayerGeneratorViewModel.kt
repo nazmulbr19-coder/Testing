@@ -257,7 +257,7 @@ class PlayerGeneratorViewModel : ViewModel() {
     fun loadLinksPrev() {
         Log.i(TAG, "loadLinksPrev")
         if (generator?.hasPrev(episodeIndex) == true) {
-            episodeIndex += 1
+            episodeIndex -= 1
             loadLinks()
         }
     }
@@ -337,6 +337,7 @@ class PlayerGeneratorViewModel : ViewModel() {
     private var currentStampJob: Job? = null
 
     fun loadStamps(duration: Long) {
+        currentStampJob?.cancel()
         currentStampJob = ioSafe {
             val genState = state.generatorState ?: return@ioSafe
             val meta = genState.meta
@@ -384,6 +385,7 @@ class PlayerGeneratorViewModel : ViewModel() {
     fun loadLinks(sourceTypes: Set<ExtractorLinkType> = LOADTYPE_INAPP) {
         Log.i(TAG, "loadLinks with generator=$generator and index=$episodeIndex")
         currentJob?.cancel()
+        currentStampJob?.cancel()
         val index = episodeIndex
 
         // Clear old data and reset the state

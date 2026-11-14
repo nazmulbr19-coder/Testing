@@ -53,7 +53,9 @@ import com.lagradost.cloudstream3.utils.downloader.DownloadObjects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
+import java.util.Collections
 import java.util.EnumSet
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 class HomeViewModel : ViewModel() {
@@ -145,7 +147,7 @@ class HomeViewModel : ViewModel() {
     private val _resumeWatching = MutableLiveData<List<SearchResponse>>()
     private val _preview = MutableLiveData<Resource<Pair<Boolean, List<LoadResponse>>>>()
     private val previewResponses = CopyOnWriteArrayList<LoadResponse>()
-    private val previewResponsesAdded = mutableSetOf<String>()
+    private val previewResponsesAdded: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     val resumeWatching: LiveData<List<SearchResponse>> = _resumeWatching
     val preview: LiveData<Resource<Pair<Boolean, List<LoadResponse>>>> = _preview
@@ -223,56 +225,64 @@ class HomeViewModel : ViewModel() {
         var hasNext: Boolean,
     )
 
-    private val expandable: MutableMap<String, ExpandableHomepageList> = mutableMapOf()
+    private val expandable: MutableMap<String, ExpandableHomepageList> =
+        Collections.synchronizedMap(LinkedHashMap())
     private val _page =
         MutableLiveData<Resource<Map<String, ExpandableHomepageList>>>(Resource.Loading())
     val page: LiveData<Resource<Map<String, ExpandableHomepageList>>> = _page
 
-    val lock: MutableSet<String> = mutableSetOf()
+    val lock: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     suspend fun expandAndReturn(name: String): ExpandableHomepageList? {
-        if (lock.contains(name)) return null
-        lock += name
+        if (!lock.add(name)) return null
+        try {
+            repo?.apply {
+                waitForHomeDelay()
 
-        repo?.apply {
-            waitForHomeDelay()
+                val current = synchronized(expandable) { expandable[name] }
+                current?.let {
+                    debugAssert({ !it.hasNext }) {
+                        "Expand called when not needed"
+                    }
 
-            expandable[name]?.let { current ->
-                debugAssert({ !current.hasNext }) {
-                    "Expand called when not needed"
-                }
+                    val nextPage = it.currentPage + 1
+                    val next = getMainPage(nextPage, mainPage.indexOfFirst { page -> page.name == name })
+                    if (next is Resource.Success) {
+                        next.value.filterNotNull().forEach { main ->
+                            main.items.forEach { newList ->
+                                val key = newList.name
+                                synchronized(expandable) {
+                                    expandable[key]?.apply {
+                                        hasNext = main.hasNext
+                                        currentPage = nextPage
 
-                val nextPage = current.currentPage + 1
-                val next = getMainPage(nextPage, mainPage.indexOfFirst { it.name == name })
-                if (next is Resource.Success) {
-                    next.value.filterNotNull().forEach { main ->
-                        main.items.forEach { newList ->
-                            val key = newList.name
-                            expandable[key]?.apply {
-                                hasNext = main.hasNext
-                                currentPage = nextPage
+                                        debugWarning({ newList.list.any { outer -> this.list.list.any { existing -> existing.url == outer.url } } }) {
+                                            "Expanded contained an item that was previously already in the list\n${list.name} = ${this.list.list}\n${newList.name} = ${newList.list}"
+                                        }
 
-                                debugWarning({ newList.list.any { outer -> this.list.list.any { it.url == outer.url } } }) {
-                                    "Expanded contained an item that was previously already in the list\n${list.name} = ${this.list.list}\n${newList.name} = ${newList.list}"
+                                        val existingUrls = this.list.list.mapTo(HashSet()) { item -> item.url }
+                                        val uniqueNew = newList.list.filter { item -> existingUrls.add(item.url) }
+                                        if (uniqueNew.isNotEmpty()) {
+                                            this.list.list += uniqueNew
+                                        }
+                                    } ?: debugWarning {
+                                        "Expanded an item not in main load named $key, current list is ${expandable.keys}"
+                                    }
                                 }
-
-                                this.list.list += newList.list
-                                this.list.list.distinctBy { it.url } // just to be sure we are not adding the same shit for some reason
-                            } ?: debugWarning {
-                                "Expanded an item not in main load named $key, current list is ${expandable.keys}"
                             }
                         }
+                    } else {
+                        it.hasNext = false
                     }
-                } else {
-                    current.hasNext = false
                 }
+                val snapshot = synchronized(expandable) { LinkedHashMap(expandable) }
+                _page.postValue(Resource.Success(snapshot))
             }
-            _page.postValue(Resource.Success(expandable))
+        } finally {
+            lock.remove(name)
         }
 
-        lock -= name
-
-        return expandable[name]
+        return synchronized(expandable) { expandable[name] }
     }
 
     // this is soo over engineered, but idk how I can make it clean without making the main api harder to use :pensive:
@@ -291,14 +301,14 @@ class HomeViewModel : ViewModel() {
 
         val addItems = arrayListOf<SearchResponse>()
         for (searchResponse in shuffledList) {
-            if (!alreadyAdded.contains(searchResponse.url)) {
+            if (alreadyAdded.add(searchResponse.url)) {
                 addItems.add(searchResponse)
-                previewResponsesAdded.add(searchResponse.url)
                 if (++count >= size) {
                     break
                 }
             }
         }
+        if (addItems.isEmpty()) return 0
 
         val add = addItems.amap { searchResponse ->
             repo?.load(searchResponse.url)
@@ -309,109 +319,119 @@ class HomeViewModel : ViewModel() {
 
     private var addJob: Job? = null
     fun loadMoreHomeScrollResponses() {
+        addJob?.cancel()
         addJob = ioSafe {
             updatePreviewResponses(previewResponses, previewResponsesAdded, currentShuffledList, 1)
-            _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
+            _preview.postValue(
+                Resource.Success(
+                    (previewResponsesAdded.size < currentShuffledList.size) to previewResponses.toList()
+                )
+            )
         }
     }
 
     private fun load(api: MainAPI): Job = ioSafe {
-        repo = //if (api != null) {
-            APIRepository(api)
-        //} else {
-        //    autoloadRepo()
-        //}
+        try {
+            repo = APIRepository(api)
 
-        _apiName.postValue(repo?.name)
-        _randomItems.postValue(listOf())
+            _apiName.postValue(repo?.name)
+            _randomItems.postValue(listOf())
 
-        if (repo?.hasMainPage != true) {
-            _page.postValue(Resource.Success(emptyMap()))
-            _preview.postValue(Resource.Failure(false, "No homepage"))
-            return@ioSafe
-        }
+            if (repo?.hasMainPage != true) {
+                _page.postValue(Resource.Success(emptyMap()))
+                _preview.postValue(Resource.Failure(false, "No homepage"))
+                return@ioSafe
+            }
 
+            _page.postValue(Resource.Loading())
+            _preview.postValue(Resource.Loading())
+            // cancel the current preview expand as that is no longer relevant
+            addJob?.cancel()
 
-        _page.postValue(Resource.Loading())
-        _preview.postValue(Resource.Loading())
-        // cancel the current preview expand as that is no longer relevant
-        addJob?.cancel()
-
-        when (val data = repo?.getMainPage(1, null)) {
-            is Resource.Success -> {
-                try {
-                    expandable.clear()
-                    data.value.forEach { home ->
-                        home?.items?.forEach { list ->
-                            val filteredList =
-                                context?.filterHomePageListByFilmQuality(list) ?: list
-                            expandable[list.name] =
-                                ExpandableHomepageList(
-                                    filteredList.copy(
-                                        list = CopyOnWriteArrayList(
-                                            filteredList.list
+            when (val data = repo?.getMainPage(1, null)) {
+                is Resource.Success -> {
+                    try {
+                        synchronized(expandable) {
+                            expandable.clear()
+                            data.value.forEach { home ->
+                                home?.items?.forEach { list ->
+                                    val filteredList =
+                                        context?.filterHomePageListByFilmQuality(list) ?: list
+                                    expandable[list.name] =
+                                        ExpandableHomepageList(
+                                            filteredList.copy(
+                                                list = CopyOnWriteArrayList(
+                                                    filteredList.list
+                                                )
+                                            ), 1, home.hasNext
                                         )
-                                    ), 1, home.hasNext
+                                }
+                            }
+                        }
+
+                        val items = data.value.mapNotNull { it?.items }.flatten()
+
+                        previewResponses.clear()
+                        previewResponsesAdded.clear()
+
+                        if (items.isNotEmpty()) {
+                            val currentList =
+                                items.shuffled().filter { it.list.isNotEmpty() }
+                                    .flatMap { it.list }
+                                    .distinctBy { it.url }.toList()
+
+                            if (currentList.isNotEmpty()) {
+                                val randomItems =
+                                    context?.filterSearchResultByFilmQuality(currentList.shuffled())
+                                        ?: currentList.shuffled()
+
+                                updatePreviewResponses(
+                                    previewResponses,
+                                    previewResponsesAdded,
+                                    randomItems,
+                                    3
                                 )
+
+                                _randomItems.postValue(randomItems)
+                                currentShuffledList = randomItems
+                            }
                         }
-                    }
-
-                    val items = data.value.mapNotNull { it?.items }.flatten()
-
-
-                    previewResponses.clear()
-                    previewResponsesAdded.clear()
-
-                    //val home = data.value
-                    if (items.isNotEmpty()) {
-                        val currentList =
-                            items.shuffled().filter { it.list.isNotEmpty() }
-                                .flatMap { it.list }
-                                .distinctBy { it.url }.toList()
-
-                        if (currentList.isNotEmpty()) {
-                            val randomItems =
-                                context?.filterSearchResultByFilmQuality(currentList.shuffled())
-                                    ?: currentList.shuffled()
-
-                            updatePreviewResponses(
-                                previewResponses,
-                                previewResponsesAdded,
-                                randomItems,
-                                3
+                        if (previewResponses.isEmpty()) {
+                            _preview.postValue(
+                                Resource.Failure(
+                                    false,
+                                    "No homepage responses"
+                                )
                             )
-
-                            _randomItems.postValue(randomItems)
-                            currentShuffledList = randomItems
+                        } else {
+                            _preview.postValue(
+                                Resource.Success(
+                                    (previewResponsesAdded.size < currentShuffledList.size) to previewResponses.toList()
+                                )
+                            )
                         }
+                        val snapshot = synchronized(expandable) { LinkedHashMap(expandable) }
+                        _page.postValue(Resource.Success(snapshot))
+                    } catch (e: Exception) {
+                        _randomItems.postValue(emptyList())
+                        logError(e)
                     }
-                    if (previewResponses.isEmpty()) {
-                        _preview.postValue(
-                            Resource.Failure(
-                                false,
-                                "No homepage responses"
-                            )
-                        )
-                    } else {
-                        _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
-                    }
-                    _page.postValue(Resource.Success(expandable))
-                } catch (e: Exception) {
-                    _randomItems.postValue(emptyList())
-                    logError(e)
                 }
-            }
 
-            is Resource.Failure -> {
-                @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
-                _page.postValue(data!!)
-                @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
-                _preview.postValue(data!!)
-            }
+                is Resource.Failure -> {
+                    @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
+                    _page.postValue(data!!)
+                    @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
+                    _preview.postValue(data!!)
+                }
 
-            else -> Unit
+                else -> Unit
+            }
+        } finally {
+            if (isCurrentlyLoadingName == api.name) {
+                isCurrentlyLoadingName = null
+            }
         }
-        isCurrentlyLoadingName = null
     }
 
     fun click(callback: SearchClickCallback) {

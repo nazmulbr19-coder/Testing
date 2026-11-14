@@ -50,7 +50,6 @@ class MyMiniControllerFragment : MiniControllerFragment() {
     ): View {
         return try {
             super.onCreateView(inflater, container, savedInstanceState)
-                ?: View(inflater.context).apply { visibility = View.GONE }
         } catch (t: Throwable) {
             Log.w("MyMiniController", "Cast mini controller view unavailable: ${t.message}")
             View(inflater.context).apply { visibility = View.GONE }

@@ -14,6 +14,7 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 
 
 @AnyThread
@@ -38,7 +39,7 @@ class CloudflareKiller : Interceptor {
         }
     }
 
-    val savedCookies: MutableMap<String, Map<String, String>> = mutableMapOf()
+    val savedCookies: MutableMap<String, Map<String, String>> = ConcurrentHashMap()
 
     /**
      * Gets the headers with cookies, webview user agent included!
@@ -48,7 +49,8 @@ class CloudflareKiller : Interceptor {
             mapOf("user-agent" to it)
         } ?: emptyMap()
 
-        return getHeaders(userAgentHeaders, savedCookies[URI(url).host] ?: emptyMap())
+        val host = safe { URI(url).host }
+        return getHeaders(userAgentHeaders, host?.let { savedCookies[it] } ?: emptyMap())
     }
 
     override fun intercept(chain: Interceptor.Chain): Response = runBlocking {

@@ -44,8 +44,9 @@ object ImageLoader {
             .diskCachePolicy(CachePolicy.ENABLED)
             .networkCachePolicy(CachePolicy.ENABLED)
             .memoryCache {
-                MemoryCache.Builder().maxSizePercent(context, 0.1)//10 % of heap for mem-cache
-                    .strongReferencesEnabled(false)
+                MemoryCache.Builder()
+                    .maxSizePercent(context, 0.16)
+                    .strongReferencesEnabled(true)
                     .build()
             }
             .diskCache {
@@ -58,7 +59,18 @@ object ImageLoader {
             /** Pass interceptors with care, unnecessary passing tokens to servers
             or image hosting services causes unauthorized exceptions **/
             .components {
-                add(OkHttpNetworkFetcherFactory(callFactory = { buildDefaultClient(context) }))
+                // Disable duplicate OkHttp http_cache because Coil already manages cs3_image_cache
+                add(
+                    OkHttpNetworkFetcherFactory(
+                        callFactory = {
+                            buildDefaultClient(
+                                context = context,
+                                ignoreSSL = false,
+                                enableCache = false
+                            )
+                        }
+                    )
+                )
                 if (isBrokenHardware) {
                     add(BitmapFactoryDecoder.Factory())
                 } // sw decoder
@@ -90,6 +102,10 @@ object ImageLoader {
         }
     }
 
+    private val DEFAULT_NETWORK_HEADERS = NetworkHeaders.Builder().apply {
+        this["User-Agent"] = USER_AGENT
+    }.build()
+
     /** coil's built in loader attached w/ global synchronized instance **/
     private fun ImageView.loadImageInternal(
         imageData: Any?,
@@ -103,14 +119,19 @@ object ImageLoader {
         if (imageData is Int) {
             this.setImageResource(imageData); return
         }
-        // headers can be overridden by extensions.
-        this.load(imageData, SingletonImageLoader.get(context)) {
-            this.httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
+        val requestHeaders = if (headers.isNullOrEmpty()) {
+            DEFAULT_NETWORK_HEADERS
+        } else {
+            NetworkHeaders.Builder().also { headerBuilder ->
                 headerBuilder["User-Agent"] = USER_AGENT
-                headers?.forEach { (key, value) ->
+                headers.forEach { (key, value) ->
                     headerBuilder[key] = value
                 }
-            }.build())
+            }.build()
+        }
+        // headers can be overridden by extensions.
+        this.load(imageData, SingletonImageLoader.get(context)) {
+            this.httpHeaders(requestHeaders)
             builder() // if passed
         }
     }

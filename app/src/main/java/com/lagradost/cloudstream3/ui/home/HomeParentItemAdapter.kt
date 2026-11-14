@@ -52,6 +52,10 @@ open class ParentItemAdapter(
     }
 
     data class ParentItemHolder(val binding: ViewBinding) : ViewHolderState<Bundle>(binding) {
+        var currentListName: String = ""
+        var expandCount: Int = 0
+        var scrollListenerAttached: Boolean = false
+
         override fun save(): Bundle = Bundle().apply {
             val recyclerView = (binding as? HomepageParentBinding)?.homeChildRecyclerview
             putParcelable(
@@ -82,7 +86,21 @@ open class ParentItemAdapter(
     ) {
         val binding = holder.view
         if (binding !is HomepageParentBinding) return
-        (binding.homeChildRecyclerview.adapter as? HomeChildItemAdapter)?.submitList(item.list.list)
+        (holder as? ParentItemHolder)?.let { parentHolder ->
+            if (parentHolder.currentListName != item.list.name) {
+                parentHolder.currentListName = item.list.name
+                parentHolder.expandCount = 0
+            }
+        }
+        (binding.homeChildRecyclerview.adapter as? HomeChildItemAdapter)?.apply {
+            hasNext = item.hasNext
+            submitList(item.list.list)
+        }
+        if (isLayout(PHONE or EMULATOR)) {
+            binding.homeChildMoreInfo.setOnClickListener {
+                moreInfoClickCallback.invoke(item)
+            }
+        }
     }
 
     override fun onBindContent(
@@ -95,6 +113,12 @@ open class ParentItemAdapter(
         val binding = holder.view
         if (binding !is HomepageParentBinding) return
         val info = item.list
+        val parentHolder = holder as? ParentItemHolder
+        if (parentHolder != null && parentHolder.currentListName != info.name) {
+            parentHolder.currentListName = info.name
+            parentHolder.expandCount = 0
+        }
+
         binding.apply {
             val currentAdapter = homeChildRecyclerview.adapter as? HomeChildItemAdapter
             if (currentAdapter == null) {
@@ -127,36 +151,27 @@ open class ParentItemAdapter(
             )
             homeChildMoreInfo.text = info.name
 
-            homeChildRecyclerview.addOnScrollListener(object :
-                RecyclerView.OnScrollListener() {
-                var expandCount = 0
-                val name = item.list.name
+            if (parentHolder != null && !parentHolder.scrollListenerAttached) {
+                parentHolder.scrollListenerAttached = true
+                homeChildRecyclerview.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                    override fun onScrollStateChanged(
+                        recyclerView: RecyclerView,
+                        newState: Int
+                    ) {
+                        super.onScrollStateChanged(recyclerView, newState)
 
-                override fun onScrollStateChanged(
-                    recyclerView: RecyclerView,
-                    newState: Int
-                ) {
-                    super.onScrollStateChanged(recyclerView, newState)
+                        val adapter = recyclerView.adapter
+                        if (adapter !is HomeChildItemAdapter) return
 
-                    val adapter = recyclerView.adapter
-                    if (adapter !is HomeChildItemAdapter) return
-
-                    val count = adapter.itemCount
-                    val hasNext = adapter.hasNext
-                    /*println(
-                        "scolling ${recyclerView.isRecyclerScrollable()} ${
-                            recyclerView.canScrollHorizontally(
-                                1
-                            )
-                        }"
-                    )*/
-                    //!recyclerView.canScrollHorizontally(1)
-                    if (!recyclerView.isRecyclerScrollable() && hasNext && expandCount != count) {
-                        expandCount = count
-                        expandCallback?.invoke(name)
+                        val count = adapter.itemCount
+                        val hasNext = adapter.hasNext
+                        if (!recyclerView.isRecyclerScrollable() && hasNext && parentHolder.expandCount != count) {
+                            parentHolder.expandCount = count
+                            expandCallback?.invoke(parentHolder.currentListName)
+                        }
                     }
-                }
-            })
+                })
+            }
 
             //(recyclerView.adapter as HomeChildItemAdapter).notifyDataSetChanged()
             if (isLayout(PHONE or EMULATOR)) {

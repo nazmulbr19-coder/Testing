@@ -317,7 +317,7 @@ object VideoDownloadManager {
 
                 val mbFormat = "%.1f MB"
 
-                if (hlsProgress != null && hlsTotal != null) {
+                if (hlsProgress != null && hlsTotal != null && hlsTotal > 0) {
                     progressPercentage = hlsProgress * 100 / hlsTotal
                     progressMbString = hlsProgress.toString()
                     totalMbString = hlsTotal.toString()
@@ -569,7 +569,8 @@ object VideoDownloadManager {
 
         val approxTotalBytes: Long
             get() = totalBytes ?: hlsTotal?.let { total ->
-                (bytesDownloaded * (total / hlsProgress.toFloat())).toLong()
+                if (hlsProgress > 0) (bytesDownloaded * (total.toFloat() / hlsProgress)).toLong()
+                else bytesDownloaded
             } ?: bytesDownloaded
 
         private var stopListener: (() -> Unit)? = null

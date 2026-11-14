@@ -428,7 +428,7 @@ class GeneratorPlayer : FullScreenPlayer() {
 
                 // Only show rewind in expanded
                 setUseRewindAction(true)
-                setUseFastForwardActionInCompactView(false)
+                setUseRewindActionInCompactView(false)
 
                 // Use custom stop action
                 setUseStopAction(false)

@@ -82,14 +82,11 @@ import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.Coroutines.main
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getAllResumeStateIds
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getLastWatched
-import com.lagradost.cloudstream3.utils.FillerEpisodeCheck.toClassDir
-import com.lagradost.cloudstream3.utils.JsUnpacker.Companion.load
 import com.lagradost.cloudstream3.utils.UIHelper.navigate
 import com.lagradost.cloudstream3.utils.downloader.DownloadObjects
 import com.lagradost.cloudstream4.AppSettings
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import okhttp3.Cache
 import java.io.File
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -691,12 +688,7 @@ object AppContextUtils {
         } else null
     }
 
-    fun Activity?.loadCache() {
-        try {
-            cacheClass("android.net.NetworkCapabilities".load())
-        } catch (_: Exception) {
-        }
-    }
+    fun Activity?.loadCache() = Unit
 
     //private val viewModel: ResultViewModel by activityViewModels()
 
@@ -861,16 +853,6 @@ object AppContextUtils {
     }
 
 
-    private fun Activity?.cacheClass(clazz: String?) {
-        clazz?.let { c ->
-            this?.cacheDir?.let {
-                Cache(
-                    directory = File(it, c.toClassDir()),
-                    maxSize = 20L * 1024L * 1024L // 20 MiB
-                )
-            }
-        }
-    }
 
     fun Context.isAppInstalled(uri: String): Boolean {
         val pm = Wrappers.packageManager(this)
