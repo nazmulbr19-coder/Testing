@@ -116,7 +116,6 @@
                 android:layout_width="wrap_content"
                 android:layout_margin="5dp"
                 android:minWidth="180dp"
-                android:nextFocusRight="@+id/home_reload_connection_go_to_game"
                 android:nextFocusUp="@id/home_reload_connectionerror"
                 android:text="@string/go_to_downloads"
                 app:icon="@drawable/netflix_download" />
@@ -127,9 +126,8 @@
                 android:layout_width="wrap_content"
                 android:layout_margin="5dp"
                 android:minWidth="180dp"
-                android:nextFocusLeft="@id/home_reload_connection_go_to_downloads"
-                android:nextFocusUp="@id/home_reload_connectionerror"
                 android:text="@string/play_game"
+                android:visibility="gone"
                 app:icon="@drawable/ic_baseline_sports_esports_24" />
         </LinearLayout>
 

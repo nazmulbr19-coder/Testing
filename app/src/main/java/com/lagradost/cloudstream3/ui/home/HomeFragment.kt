@@ -751,8 +751,9 @@ class HomeFragment : BaseFragment<FragmentHomeBinding>(
 
                         // Show the downloads and offline game buttons if we have any sort of network shenanigans
                         val showOfflineActions = hasNoNetworkConnection || isNetworkError
+                        val isGameAllowed = com.lagradost.cloudstream3.ui.game.TetrisFragment.isGameEnabled()
                         homeReloadConnectionGoToDownloads.isVisible = showOfflineActions
-                        homeReloadConnectionGoToGame.isVisible = showOfflineActions
+                        homeReloadConnectionGoToGame.isVisible = showOfflineActions && isGameAllowed
 
                         // Only hide the open in browser button if we know this is not network shenanigans related to cs3
                         homeReloadConnectionOpenInBrowser.isGone = hasNoNetworkConnection

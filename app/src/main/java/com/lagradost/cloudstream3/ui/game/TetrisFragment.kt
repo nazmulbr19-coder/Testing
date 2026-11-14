@@ -3,7 +3,10 @@ package com.lagradost.cloudstream3.ui.game
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
@@ -14,11 +17,14 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.ImageView
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
+import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
@@ -26,13 +32,21 @@ import java.io.IOException
 
 /**
  * Hosts the original larprad/tetris HTML/CSS/JS game offline via bundled assets
- * with TV Remote D-pad forwarding and edge-to-edge WindowInsets support.
+ * with a top-left Back button and automatic disabling when the app is in TV layout.
  */
 class TetrisFragment : Fragment() {
 
     companion object {
         private const val VIRTUAL_HOST = "appassets.local"
         private const val BASE_URL = "https://$VIRTUAL_HOST"
+
+        /**
+         * Offline Tetris is disabled whenever TV/Emulator layout is active.
+         */
+        fun isGameEnabled(): Boolean = !isLayout(TV or EMULATOR)
+
+        internal fun isGameEnabledForLayoutFlags(layoutFlags: Int): Boolean =
+            (layoutFlags and (TV or EMULATOR)) == 0
 
         internal fun mimeTypeForPath(path: String): String = when {
             path.endsWith(".html") -> "text/html"
@@ -105,7 +119,12 @@ class TetrisFragment : Fragment() {
             setBackgroundColor(Color.parseColor("#003063"))
         }
 
-        // Apply safe insets so notches, status bars, and gesture bars never clip HUD controls
+        // Disable the game cleanly when in TV layout
+        if (!isGameEnabled()) {
+            return root
+        }
+
+        // Apply safe insets so notches, status bars, and gesture bars never clip controls
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
@@ -124,9 +143,10 @@ class TetrisFragment : Fragment() {
         webView = tetrisWebView
         root.addView(tetrisWebView)
 
-        val isTv = isLayout(TV or EMULATOR)
-        val entryUrl = if (isTv) "$BASE_URL/index.html?tv=1" else "$BASE_URL/index.html"
-        tetrisWebView.loadUrl(entryUrl)
+        val backButton = createTopLeftBackButton(context)
+        root.addView(backButton)
+
+        tetrisWebView.loadUrl("$BASE_URL/index.html")
         tetrisWebView.requestFocus()
 
         return root
@@ -134,6 +154,14 @@ class TetrisFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        if (!isGameEnabled()) {
+            view.post {
+                if (isAdded) {
+                    findNavController().popBackStack()
+                }
+            }
+            return
+        }
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             backPressedCallback
@@ -142,6 +170,10 @@ class TetrisFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        if (!isGameEnabled()) {
+            if (isAdded) findNavController().popBackStack()
+            return
+        }
         webView?.onResume()
         webView?.requestFocus()
     }
@@ -164,8 +196,50 @@ class TetrisFragment : Fragment() {
         super.onDestroyView()
     }
 
+    private fun createTopLeftBackButton(context: Context): ImageButton {
+        val density = context.resources.displayMetrics.density
+        val sizePx = (48 * density).toInt()
+        val marginPx = (10 * density).toInt()
+        val paddingPx = (12 * density).toInt()
+
+        val circleBg = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.argb(190, 10, 22, 46))
+            setStroke((1.5f * density).toInt(), Color.argb(95, 255, 255, 255))
+        }
+
+        val rippleValue = TypedValue()
+        context.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, rippleValue, true)
+
+        return ImageButton(context).apply {
+            id = View.generateViewId()
+            contentDescription = context.getString(R.string.tetris_back)
+            setImageResource(R.drawable.ic_baseline_arrow_back_24)
+            setColorFilter(Color.WHITE)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
+            background = circleBg
+            if (rippleValue.resourceId != 0) {
+                foreground = context.getDrawable(rippleValue.resourceId)
+            }
+            elevation = 6 * density
+            layoutParams = FrameLayout.LayoutParams(sizePx, sizePx).apply {
+                gravity = Gravity.TOP or Gravity.START
+                marginStart = marginPx
+                topMargin = marginPx
+            }
+            setOnClickListener {
+                exitGame()
+            }
+        }
+    }
+
     private fun exitGame() {
         backPressedCallback.isEnabled = false
+        webView?.evaluateJavascript(
+            "window.__abidexTetrisPauseAudio && window.__abidexTetrisPauseAudio()",
+            null
+        )
         findNavController().popBackStack()
     }
 
@@ -231,7 +305,6 @@ class TetrisFragment : Fragment() {
                         null
                     )
                 }
-                // Consume both ACTION_DOWN and ACTION_UP so Android focus never jumps away
                 return true
             }
             return super.dispatchKeyEvent(event)

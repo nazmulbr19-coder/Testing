@@ -849,5 +849,6 @@
     <string name="tetris_tv_controls_soft">▼  Soft drop</string>
     <string name="tetris_tv_controls_hard">OK / Center  Hard drop</string>
     <string name="tetris_tv_controls_pause">Back / Play-Pause  Pause menu</string>
+    <string name="tetris_back">Back to app</string>
 </resources>
 

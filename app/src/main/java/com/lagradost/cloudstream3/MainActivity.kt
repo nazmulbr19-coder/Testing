@@ -551,6 +551,10 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         }*/
 
         binding?.apply {
+            val isGameAllowed = com.lagradost.cloudstream3.ui.game.TetrisFragment.isGameEnabled()
+            navRailView.menu.findItem(R.id.navigation_tetris)?.isVisible = isGameAllowed
+            navView.menu.findItem(R.id.navigation_tetris)?.isVisible = isGameAllowed
+
             navRailView.isVisible = isNavVisible && isLandscape()
             navView.isVisible = isNavVisible && !isLandscape()
             navHostFragment.apply {
@@ -744,6 +748,12 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         lastNavTime = currentTime
 
         val destinationId = item.itemId
+
+        if (destinationId == R.id.navigation_tetris &&
+            !com.lagradost.cloudstream3.ui.game.TetrisFragment.isGameEnabled()
+        ) {
+            return false
+        }
 
         // Check if we are already at the selected destination
         if (navController.currentDestination?.id == destinationId) return false
@@ -1750,6 +1760,10 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             var prevId: Int? = null
             var prevView: View? = null
 
+            val isGameAllowed = com.lagradost.cloudstream3.ui.game.TetrisFragment.isGameEnabled()
+            rail.menu.findItem(R.id.navigation_tetris)?.isVisible = isGameAllowed
+            binding?.navView?.menu?.findItem(R.id.navigation_tetris)?.isVisible = isGameAllowed
+
             // The genius engineers at google did not actually 
             // write a nextFocus for the navrail
             rail.findViewById<View?>(R.id.navigation_settings)?.nextFocusDownId =
@@ -1763,6 +1777,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 R.id.navigation_settings
             )) {
                 val view = rail.findViewById<View?>(id) ?: continue
+                if (!view.isVisible) continue
                 prevId?.let { view.nextFocusUpId = it }
                 prevView?.nextFocusDownId = id
 

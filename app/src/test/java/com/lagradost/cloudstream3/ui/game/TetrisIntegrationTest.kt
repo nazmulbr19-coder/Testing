@@ -91,4 +91,29 @@ class TetrisIntegrationTest {
         assertEquals("save", TetrisFragment.mapKeyToAction(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD))
         assertNull(TetrisFragment.mapKeyToAction(KeyEvent.KEYCODE_BACK))
     }
+
+    @Test
+    fun `tetris game is enabled on phone layout and disabled on TV or emulator layout`() {
+        assertTrue(
+            TetrisFragment.isGameEnabledForLayoutFlags(
+                com.lagradost.cloudstream3.ui.settings.Globals.PHONE
+            )
+        )
+        assertFalse(
+            TetrisFragment.isGameEnabledForLayoutFlags(
+                com.lagradost.cloudstream3.ui.settings.Globals.TV
+            )
+        )
+        assertFalse(
+            TetrisFragment.isGameEnabledForLayoutFlags(
+                com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
+            )
+        )
+        assertFalse(
+            TetrisFragment.isGameEnabledForLayoutFlags(
+                com.lagradost.cloudstream3.ui.settings.Globals.TV or
+                    com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
+            )
+        )
+    }
 }
